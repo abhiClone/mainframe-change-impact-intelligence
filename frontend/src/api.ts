@@ -260,6 +260,236 @@ export interface TestCatalogEntry {
   description: string;
 }
 
+/* ------------------------------------------------------------------ */
+/* Phase 3A — Change-Set & Release Analysis (deterministic multi-root  */
+/* aggregation over the frozen Phase 1/2A/2B engines). Every number,    */
+/* mapping, test, signal, checklist item and incident comes from the   */
+/* API; the client invents nothing.                                    */
+/* ------------------------------------------------------------------ */
+
+export type ChangeFileStatus =
+  | "modified"
+  | "added"
+  | "deleted"
+  | "renamed"
+  | "unknown";
+
+export type MappingStatus =
+  | "mapped"
+  | "ambiguous"
+  | "unmapped"
+  | "requires_base_snapshot";
+
+export interface ChangeSetFileInput {
+  path: string;
+  status: ChangeFileStatus;
+}
+
+export type SnapshotKind = "base" | "head";
+
+export interface ChangeRootRef {
+  change_root: string;
+  snapshot: SnapshotKind;
+}
+
+export interface MappedChange {
+  file: { path: string; status: ChangeFileStatus; old_path: string | null };
+  mapping_status: MappingStatus;
+  component_ids: string[];
+  candidate_components: string[];
+  selected_component_ids: string[];
+  previous_component_ids: string[];
+  current_component_ids: string[];
+  snapshot: SnapshotKind;
+  note: string;
+}
+
+export interface ChangedComponent {
+  component_id: string;
+  originating_files: string[];
+  snapshot: SnapshotKind;
+  previous_component_ids: string[];
+  also_impacted_by: ChangeRootRef[];
+}
+
+export interface PerChangeAnalysis {
+  component_id: string;
+  source_file: string;
+  snapshot: SnapshotKind;
+  impact: IntelligenceImpact;
+  recommended_tests: RecommendedTest[];
+  risk_signals: RiskSignal[];
+  release_checklist: ReleaseChecklistItem[];
+  incident_intelligence: Record<string, unknown>;
+}
+
+export interface ImpactProvenance {
+  change_root: string;
+  snapshot: SnapshotKind;
+  depth: number;
+  dependency_paths: IntelligencePath[];
+}
+
+export interface ImpactedComponentEntry {
+  component_id: string;
+  impacted_by: string[]; // changed roots whose downstream impact includes this component
+  impacted_by_count: number;
+  per_root: ImpactProvenance[];
+}
+
+export interface PerRootTest {
+  change_root: string;
+  snapshot: SnapshotKind;
+  impact_level: TestImpactLevel;
+  rationale: string;
+  matched_components: string[];
+}
+
+export interface AggregatedTest {
+  test_id: string;
+  test_name: string;
+  test_type: string;
+  impact_level: TestImpactLevel;
+  rationale: string;
+  evidence: Evidence[];
+  recommended_because_of: ChangeRootRef[];
+  per_root: PerRootTest[];
+}
+
+export interface AggregatedResource {
+  table: string;
+  access: "read" | "write";
+  used_by: string[];
+  associated_change_roots: ChangeRootRef[];
+  evidence: Evidence[];
+}
+
+export interface AggregatedSignal {
+  id: string;
+  severity: RiskSeverity;
+  title: string;
+  explanation: string;
+  triggered_by: string[];
+  supporting_components: string[];
+  change_roots: ChangeRootRef[];
+  evidence: Evidence[];
+}
+
+export interface AggregatedChecklistItem {
+  id: string;
+  title: string;
+  detail: string;
+  rule: string;
+  related_components: string[];
+  applicable_change_roots: ChangeRootRef[];
+}
+
+export interface PerChangeIncidentReason {
+  change_root: string;
+  snapshot: SnapshotKind;
+  primary_reason: RelevanceReasonType;
+  relevance_reasons: RelevanceReason[];
+  matched_components: string[];
+}
+
+export interface AggregatedIncident {
+  incident: HistoricalIncident;
+  relevant_to_changes: ChangeRootRef[];
+  per_change: PerChangeIncidentReason[];
+  primary_reason: RelevanceReasonType;
+}
+
+export interface ChangeSetSummary {
+  changed_files: number;
+  changed_components: number;
+  cross_impacted_changed_components: number;
+  ambiguous_files: number;
+  unmapped_files: number;
+  unresolved_files: number;
+  direct_impact_union: number;
+  transitive_impact_union: number;
+  unique_impacted_components: number;
+  overlap_impacted_components: number;
+  unique_recommended_tests: number;
+  must_run_tests: number;
+  should_run_tests: number;
+  involved_db2_reads: number;
+  involved_db2_writes: number;
+  risk_signals: number;
+  checklist_items: number;
+  relevant_incidents: number;
+}
+
+export interface ChangeSetExplanation {
+  subject: string;
+  explanation_source: ExplanationSource;
+  scope_summary: string;
+  impact_summary: string;
+  testing_summary: string;
+  release_considerations: string;
+  incident_summary: string;
+  overlap_notes: string;
+}
+
+export interface ChangeSetIntelligence {
+  change_set: {
+    files: Array<{ path: string; status: ChangeFileStatus; old_path: string | null }>;
+    source: string;
+    base_ref: string | null;
+    head_ref: string | null;
+  };
+  mapped_changes: MappedChange[];
+  ambiguous_changes: MappedChange[];
+  unmapped_changes: MappedChange[];
+  unresolved_changes: MappedChange[];
+  per_change_analysis: PerChangeAnalysis[];
+  changed_components: ChangedComponent[];
+  unique_impacted_components: ImpactedComponentEntry[];
+  impacted_by_one_change: string[];
+  impacted_by_multiple_changes: string[];
+  involved_resources: AggregatedResource[];
+  recommended_tests: AggregatedTest[];
+  risk_signals: AggregatedSignal[];
+  release_checklist: AggregatedChecklistItem[];
+  relevant_incidents: AggregatedIncident[];
+  mixed_snapshot_analysis: boolean;
+  summary: ChangeSetSummary;
+  deterministic_summary: string;
+  ai_explanation: ChangeSetExplanation;
+}
+
+export interface ChangeSetAnalyzeRequest {
+  files: ChangeSetFileInput[];
+  resolutions?: Record<string, string[]>;
+}
+
+async function post<T>(path: string, body: unknown): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    throw new Error(
+      `Cannot reach the API at ${API_BASE}. Start the backend with: ` +
+        `.venv/bin/python -m uvicorn backend.api.app:app --port 8000`
+    );
+  }
+  if (!res.ok) {
+    let detail = "";
+    try {
+      const body = (await res.json()) as { detail?: string };
+      detail = body.detail ?? "";
+    } catch {
+      /* ignore */
+    }
+    throw new ApiError(res.status, detail || `Request failed (${res.status})`);
+  }
+  return (await res.json()) as T;
+}
+
 async function get<T>(path: string): Promise<T> {
   let res: Response;
   try {
@@ -302,6 +532,8 @@ export const api = {
     get<IncidentIntelligence>(
       `/api/incident-intelligence/${encodeURIComponent(id)}`
     ),
+  analyzeChangeSet: (request: ChangeSetAnalyzeRequest) =>
+    post<ChangeSetIntelligence>("/api/change-set/analyze", request),
 };
 
 export { API_BASE };

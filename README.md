@@ -49,6 +49,7 @@ incapable of altering the core's results.
 | **Release risk signals** | 8 deterministic rules (e.g. `DB2_WRITE_INVOLVED` — the only `high` severity) with reasons and evidence |
 | **Release checklist** | 7 deterministic items per change scenario, each citing its triggering rule |
 | **Historical incident intelligence** | 17 synthetic incidents, deterministically matched by 5 reason types; severity separate from relevance |
+| **Change-set / release analysis** | Multi-root aggregation of the frozen layers: deduped impact union, overlap detection, strongest-priority test merge, per-root provenance, honest uncertainty on ambiguous/unmapped/deleted files |
 | **Grounded AI explanation (optional)** | An LLM may *summarise* the deterministic results; output is guard-validated and can never alter them |
 | **Interactive dependency graph** | Cytoscape graph with parallel-edge separation, Fit/Reset view, clickable evidence panel |
 | **Negative control** | `copybook:UNUSED` demonstrates the engine reporting a clean zero-result instead of inventing relationships |
@@ -63,15 +64,17 @@ flowchart TD
     IMPACT["Impact analysis\n(direct + transitive, paths, evidence)"]
     INTEL["Release intelligence\n(test recommendations, risk signals, checklist)"]
     INC["Historical incident intelligence\n(validated dataset, deterministic relevance)"]
+    CHG["Change-set aggregation\n(multi-root union, dedup, provenance, overlap)"]
     AI["Optional AI explanation\n(grounded summary only, guard-validated)"]
     CLI["CLI\n(analyze.py / impact.py)"]
     API["FastAPI backend"]
     UI["React + Cytoscape frontend"]
 
-    SRC --> PARSE --> GRAPH --> IMPACT --> INTEL --> INC --> AI
+    SRC --> PARSE --> GRAPH --> IMPACT --> INTEL --> INC --> CHG --> AI
     IMPACT --> CLI
     INTEL --> API
     INC --> API
+    CHG --> API
     AI --> API
     API --> UI
     GRAPH --> UI
@@ -86,6 +89,7 @@ flowchart TD
 5. `build_impact_context` + deterministic rules produce test recommendations, risk signals, and checklist items.
 6. The incident relevance engine matches the validated 17-incident dataset against the impact context using 5 deterministic reason types.
 7. Optionally, the AI layer serialises the deterministic results into a strict context, generates a four-section explanation, and the hallucination guard validates every identifier before the text can reach a user.
+8. Change-set analysis (`changeset.py`, `POST /api/change-set/analyze`, the Release / Change Set view) maps a set of changed files to components and runs steps 4–7 per changed component, then aggregates the results at the release level: explicit changed components (kept disjoint from downstream impact, with cross-impact between changed roots shown, never hidden), deduplicated downstream impact union with per-root snapshot provenance, overlap detection, strongest-priority test merge, merged DB2 resources (READ/WRITE independent), merged signals/checklist with order-invariant regenerated prose, and merged incidents. See `docs/CHANGE_SET_ANALYSIS.md`.
 
 ## The deterministic principle (read this first)
 
@@ -169,18 +173,21 @@ relationships from evidence rather than guessing.
 ## Repository structure
 
 ```
-├── analyze.py / impact.py        # CLI: repository scan and change-impact queries
+├── analyze.py / impact.py / changeset.py   # CLIs: scan, single-component impact, change-set analysis
 ├── backend/
 │   ├── parsers/                  # COBOL, JCL, PROC, SQL parsers + repository scanner (frozen)
 │   ├── graph/                    # NetworkX MultiDiGraph wrapper + impact analyzer (frozen)
 │   ├── models/                   # Component, Dependency, Evidence dataclasses
 │   ├── intelligence/             # ImpactContext, test selector, risk signals, checklist,
 │   │   ├── ai/                   #   incidents/, and the optional AI explanation layer
+│   ├── changeset/                # Phase 3A: change-set models, file→component mapper,
+│   │   └── ai/                   #   explicit/git providers, multi-root aggregation, AI explainer
 │   ├── api/                      # FastAPI app: /api/* (graph) + /api/intelligence/* etc.
-│   └── tests/                    # 166 backend tests
+│   └── tests/                    # 219 backend tests (166 frozen-phase + 53 Phase 3A)
 ├── frontend/src/
-│   ├── views/                    # Overview, Dependency Explorer, Change Impact, Graph, Release Intelligence
-│   └── __tests__/ / views/__tests__/   # 17 frontend tests (Vitest)
+│   ├── views/                    # Overview, Dependency Explorer, Change Impact, Graph,
+│   │                             #   Release Intelligence, Release / Change Set
+│   └── __tests__/ / views/__tests__/   # 30 frontend tests (Vitest)
 ├── sample_mainframe/             # synthetic demo repository (COBOL, copybooks, JCL, PROCs, DB2 DDL,
 │                                 #   incidents, test catalog) — see "Synthetic data" below
 ├── screenshots/                  # UI captures used in this README and docs/DEMO_GUIDE.md
@@ -255,15 +262,17 @@ The frontend expects the API at `http://localhost:8000`.
 ## Running tests
 
 ```bash
-./run_tests.sh                        # backend: 166 tests
-cd frontend && npm test               # frontend: 17 tests
+./run_tests.sh                        # backend: 219 tests
+cd frontend && npm test               # frontend: 30 tests
 ```
 
 Coverage: parsers and robustness, graph multi-edge semantics, impact direction, evidence
 completeness, deterministic test selection, risk-signal rules, checklist rules, incident
-validation + relevance, AI guard + providers + fallback, API contracts, UI trust boundaries
-(`VERIFIED IMPACT` / `DETERMINISTIC SUMMARY` / `AI EXPLANATION` badges), parallel-edge
-independence, graph controls. See `docs/TESTING.md`.
+validation + relevance, AI guard + providers + fallback, change-set file→component mapping,
+git-diff providers (temporary repos only), multi-root dedup + provenance + overlap,
+AI cannot-mutate-determinism, API contracts, UI trust boundaries
+(`VERIFIED CHANGE SET` / `VERIFIED IMPACT` / `DETERMINISTIC SUMMARY` / `AI EXPLANATION`
+badges), parallel-edge independence, graph controls. See `docs/TESTING.md`.
 
 ## CLI commands
 
@@ -274,6 +283,11 @@ independence, graph controls. See `docs/TESTING.md`.
 .venv/bin/python impact.py program:WARR001       # impact of a program change
 .venv/bin/python impact.py table:WARRANTY        # impact of a DB2 table change
 .venv/bin/python impact.py program:NOPE          # unknown component -> clear error
+
+# Change-set analysis (Phase 3A): files -> components -> release union
+.venv/bin/python changeset.py --file copybook/WARRCOPY.cpy --file cobol/WARR002.cbl
+.venv/bin/python changeset.py --file sql/schema.sql --resolve sql/schema.sql=table:WARRANTY
+.venv/bin/python changeset.py --repo . --base HEAD~1 --head HEAD   # git diff mode (local repo)
 ```
 
 ## API overview
@@ -296,6 +310,7 @@ incident dataset returns HTTP 500 naming the problem. Full reference: `docs/API.
 | `GET /api/incidents` | all 17 historical incidents |
 | `GET /api/incidents/{incident_id}` | one incident |
 | `GET /api/incident-intelligence/{id}` | relevant incidents with deterministic reasons |
+| `POST /api/change-set/analyze` | change-set → release-candidate analysis: file mapping, per-change impact, deduped union, tests, signals, checklist, incidents, deterministic summary |
 
 ## AI trust boundary
 

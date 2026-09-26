@@ -58,6 +58,7 @@ flowchart TD
 | `backend/api/app.py` | FastAPI app; graph built once at startup |
 | `backend/api/intelligence.py` | Phase 2A/2B router: `/api/intelligence/{id}`, tests, signals, catalog, incidents |
 | `backend/intelligence/ai/` | `ai_models` (strict contract) → `providers` → `guard` → `service.explain_change()` |
+| `backend/changeset/` | `models` (change-set result contract) → `mapping` (file→component) → `providers` (explicit list / git diff) → `service` (multi-root aggregation over the frozen layers) → `ai` (change-set explainer + extended guard) |
 
 ## Key design decisions (summary)
 

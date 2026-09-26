@@ -60,7 +60,31 @@ Type `copybook:UNUSED`, analyse. Zero impacts, zero tests, zero signals, zero
 incidents — a clean empty state. "The engine reports what the evidence supports,
 including nothing."
 
-## 6. The trust boundary (30s, closer)
+## 6. Release / Change Set — two changed files (2 min)
+
+The Phase 3A scenario. Open the **Release / Change Set** tab, click **Load demo
+change set** (`copybook/WARRCOPY.cpy` + `cobol/WARR002.cbl` — input only; every
+result comes from the backend), then **Analyze release**. Walk the sections:
+
+- **Changed Files & Mapping** — both files `mapped`; note the `VERIFIED CHANGE SET` badge.
+- **Changed Components** — the two explicit change roots (`copybook:WARRCOPY`, `program:WARR002`), each with its originating file and a `head` snapshot badge. Note the cross-impact line: `program:WARR002` is *also downstream-impacted by* `copybook:WARRCOPY` — changed roots are never hidden inside the downstream list.
+- **Downstream Impacted Components** — 4 components (`job:DAILY01`, `job:WARRBTCH`, `proc:WARRANTY`, `program:WARR001`); changed roots are excluded by definition. Each entry keeps per-root provenance with snapshot badges.
+- **Impact Overlap** — 3 components impacted by *both* changes: `job:DAILY01`, `job:WARRBTCH`, `proc:WARRANTY`.
+- **Release Summary** — read the deterministic summary: 2 files → 2 changed components; 4 downstream impacted (3 direct union, 3 transitive union); 7 tests (6 `MUST_RUN`, 1 `SHOULD_RUN`); 1 DB2 read, 2 DB2 writes; 7 signals; 7 checklist items; 11 incidents.
+- **Recommended Tests** — deduplicated; `TC-WARR-001` keeps both per-change reasons and the strongest level (`MUST_RUN`).
+- **Historical Incidents** — deduplicated with per-change relevance reasons.
+- **AI Release Explanation** — `DETERMINISTIC SUMMARY` badge: the AI cannot add components, impact, tests, risks, or incidents.
+
+Optional order-invariance check: swap the two files in the input rows and re-run —
+the release summary, prose, and evidence order are byte-identical, because
+aggregate signal explanations and checklist details are regenerated from merged
+structured fields (sorted), never copied from the first processed change root.
+
+Optional live detour: add `README.md` to the change set and re-run — it appears as
+`unmapped` and the Mainframe result is unchanged. "Non-Mainframe files stay visible
+but contribute no impact."
+
+## 7. The trust boundary (30s, closer)
 
 Recap the three badges and the principle:
 

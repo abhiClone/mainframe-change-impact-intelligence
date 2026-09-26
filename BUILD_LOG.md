@@ -677,3 +677,166 @@ primary-vs-all count semantics).
   empty for Phase 1 paths and Phase 2A decision logic).
 
 Not committed, not tagged. Nothing beyond Phase 2B.
+
+---
+
+## 2026-09-26 — Phase 3A (development, unreleased): final corrections and full verification
+
+Branch: phase3-changeset-analysis (from public main f1009b4). Uncommitted, unpushed. No tags moved, no v1.1.0, no Phase 3B.
+
+Corrections since the 217-test checkpoint:
+
+1. Test-catalog scope bug: a foreign source tree (no tests/test_catalog.yaml)
+   silently inherited the bundled sample catalog, whose covered components
+   don't exist in that tree. Fix: the tree's own tests/test_catalog.yaml wins;
+   the bundled catalog is a fallback for the bundled sample_mainframe only;
+   a foreign tree without a catalog raises a clear controlled error advising
+   --no-test-catalog. CLI gains --no-test-catalog for foreign trees without
+   applicable release test metadata. Git CLI extracts the head ref's
+   tests/test_catalog.yaml (new GitDiffProvider.extract_file) into the temp
+   source tree when present.
+2. CLI traceback leak: missing/inapplicable catalog surfaced as an uncaught
+   traceback; analyzer construction is now inside the CLI exception handler in
+   both git and explicit modes — prints "error: ..." with non-zero exit.
+3. Catalog filename: real file is tests/test_catalog.yaml, not
+   tests/catalog.yaml; fixed in service, CLI planting, and docs references.
+4. PROC mapping (frozen Phase 1 scanner materializes PROCs referenced by JCL
+   with source_file="unknown" before proc/*.proc is walked; setdefault keeps
+   the materialized entry — Phase 1 untouched): the Phase 3A mapper gained a
+   deterministic parser fallback — when the file→component index misses, the
+   file is parsed with the unchanged Phase 1 parsers and mapped only if the
+   parsed id is a known graph component. proc/WARRANTY.proc now maps to
+   proc:WARRANTY with an honest note ("resolved via the Phase 1 parsers;
+   scanner metadata was 'unknown'"). Required PROC mapping tests added.
+
+Executed evidence:
+
+- Backend: 219 passed, 0 failed (166 frozen + 53 Phase 3A: 24 mapping/providers,
+  29 aggregation). Full suite rerun after all corrections.
+- Frontend: 30 passed, 0 failed (17 frozen + 13 ChangeSetView); production
+  build (tsc -b + vite build) succeeds.
+- CLI explicit mode: WARRCOPY + WARR002 → roots copybook:WARRCOPY,
+  program:WARR002; 5 unique impacts; overlap job:DAILY01, job:WARRBTCH,
+  proc:WARRANTY; 7 tests (6 MUST_RUN / 1 SHOULD_RUN); DB2 table:CLAIM_HISTORY
+  WRITE, table:WARRANTY READ+WRITE; 7 risk signals; 7 checklist items;
+  11 relevant incidents; explanation_source deterministic.
+- CLI explicit: UNUSED + README → UNUSED mapped (0/0 impact), README unmapped,
+  no impact created. Ambiguous sql/schema.sql exposes 4 candidates, selects
+  nothing; explicit --resolve table:WARRANTY maps and analyzes. Invalid
+  status → HTTP 422 / clear CLI error. Invalid resolution → HTTP 400.
+- CLI git mode (synthetic temp repo, never touches project history):
+  modified/added/renamed/deleted parsing verified; deleted program:WORKER
+  maps from base-snapshot bytes and analyzes on the base graph; foreign tree
+  with own tests/test_catalog.yaml plants it and recommends TC-DEMO-1
+  MUST_RUN; foreign tree without catalog → controlled error (no traceback)
+  advising --no-test-catalog; --no-test-catalog analyzes cleanly.
+- API: GET /api/summary unchanged; GET /api/intelligence/copybook:WARRCOPY
+  and GET /api/incident-intelligence/copybook:WARRCOPY byte-identical between
+  main (worktree, port 8124) and branch (port 8123); POST
+  /api/change-set/analyze verified live (WARRCOPY+WARR002 demo numbers match
+  CLI; proc/WARRANTY.proc maps via parser fallback).
+- Regression vs main (f1009b4): analyze.py, impact.py copybook:WARRCOPY,
+  impact.py copybook:UNUSED outputs byte-identical; git diff confirms
+  backend/parsers, backend/graph, backend/models, existing views untouched;
+  shared-file changes purely additive (api/app.py: +changeset router, POST in
+  CORS; impact_context.py: build_impact_context_on extracted, existing
+  build_impact_context delegates with identical semantics; App.tsx: sixth tab
+  entry only; api.ts: new types + analyzeChangeSet; App.css: new styles).
+- Chromium verification (real Chromium via Playwright @1440x900,
+  executed): all six tabs render, none blank, no error banners. Release /
+  Change Set: "Load demo change set" populates exactly
+  copybook/WARRCOPY.cpy + cobol/WARR002.cbl (input only); "Analyze release"
+  shows VERIFIED CHANGE SET / VERIFIED IMPACT / DETERMINISTIC SUMMARY /
+  AI EXPLANATION badges and numbers identical to the CLI/API: 2 files →
+  2 components, 2 mapped / 0 ambiguous / 0 unmapped; 5 unique impacted
+  (4 direct union, 3 transitive union); overlap job:DAILY01, job:WARRBTCH,
+  proc:WARRANTY; 7 tests (6 MUST_RUN / 1 SHOULD_RUN); DB2 1 read + 2 write;
+  7 risk signals; 7 checklist items; 11 relevant incidents. Release
+  Intelligence tab unchanged (WARRCOPY verified via UI + byte-identical
+  API). Screenshot captured at /tmp/changeset-results.png.
+- git status: modified (README.md, ROADMAP.md, backend/api/app.py,
+  backend/intelligence/impact_context.py, docs/*.md, frontend/src/App.tsx,
+  frontend/src/App.css, frontend/src/api.ts) + new files only
+  (backend/changeset/, backend/api/changeset.py, changeset.py,
+  docs/CHANGE_SET_ANALYSIS.md, ChangeSetView + tests, Phase 3A backend tests).
+  Branch phase3-changeset-analysis only; tags untouched; nothing pushed.
+
+Stop: no merge, no publish, no tag, no v1.1.0, no Phase 3B.
+
+## 2026-09-26 — Phase 3A targeted remediation (M1–M8, L1, L2; uncommitted)
+
+Branch phase3-changeset-analysis (baseline f1009b4). Independent audit of
+the Phase 3A work found 0 HIGH, 8 MEDIUM, 6 LOW; all were remediated in
+Phase 3 code only. Frozen Phase 1/2A/2B semantics untouched
+(backend/parsers, backend/graph, backend/models.py: git diff vs f1009b4
+empty; analyze.py / impact.py copybook:WARRCOPY / impact.py copybook:UNUSED
+outputs byte-identical to f1009b4 via a scratch worktree).
+
+- M6 path containment: resolve_contained_path() in
+  backend/changeset/mapping.py rejects POSIX absolute, Windows
+  drive/UNC, any ".." segment, root escapes, and symlink escapes
+  before any read; applied to _parse_head_file and to git-mode reads
+  (read_base_file, extract_file, source_prefix). read_text-spy tests
+  prove no read occurs for hostile paths.
+- L1 strict types: ChangeStatus, MappingStatus, Snapshot
+  ("base"/"head"), TestImpactLevel, RiskSeverity, ResourceAccess as
+  Literals; models rewritten (ChangedComponent, ChangeRootRef,
+  ImpactProvenance, MappedChange.previous/current_component_ids,
+  mixed_snapshot_analysis, summary changed_components +
+  cross_impacted_changed_components).
+- M3 input normalization: exact-duplicate (path, old_path, status)
+  dedup; conflicting statuses -> clear ValueError (API 400, CLI
+  exit 1 with "error: ..." and no traceback); resolution dedup; one
+  analysis per component with originating_files provenance.
+- M2 changed vs downstream: changed_components (explicit roots) and
+  unique_impacted_components (downstream only) disjoint by
+  construction; cross-impact preserved in
+  ChangedComponent.also_impacted_by + summary count.
+- M1 order-invariant prose: backend/changeset/prose.py regenerates
+  aggregate signal explanations and checklist details from merged
+  sorted structured fields; evidence sorted by (file, line, text).
+  CLI --json output identical for A,B vs B,A except input-echo order.
+- M4 snapshot provenance: every per-root ref carries snapshot;
+  mixed_snapshot_analysis flag + deterministic-summary wording; UI
+  base/head badges.
+- M5 rename semantics: one renamed event; old path mapped from base,
+  new path from head; previous/current component ids; same identity
+  analyzed once (head), identity change analyzed on base+head.
+  (COBOL/copybook identity is filename-derived per frozen Phase 1, so
+  COBOL renames always change identity; SQL table identity is
+  DDL-derived.)
+- M8 catalog isolation tests: own-catalog-wins, foreign-no-catalog
+  controlled error, catalog=[] clean, no sample leakage, git temp
+  repo head catalog (fixtures use valid catalogs).
+- L2: invalid --source-prefix prints "error: ..." (exit 1, no
+  traceback).
+- Tests: backend 255 passed (219 pre-existing + 11 M6 + 1 M2 +
+  24 remediation, incl. order-invariance, cross-impact, duplicates,
+  mixed snapshot, renames, hostile paths, enum rejection, L2 CLI,
+  primary demo numbers); frontend 34 passed (30 pre-existing + 4 new);
+  vite build succeeds (known non-blocking chunk-size warning).
+- Docs: CHANGE_SET_ANALYSIS.md (remediation section + updated
+  aggregation/UI), DEMO_GUIDE.md (Changed Components, downstream,
+  corrected overlap job:DAILY01/job:WARRBTCH/proc:WARRANTY, demo
+  numbers, order-invariance case), LIMITATIONS.md (rename identity,
+  path containment), API.md, README.md.
+- Demo numbers (WARRCOPY+WARR002, live CLI/API/UI): 2 files, 2
+  changed, 1 cross-impacted (program:WARR002 by copybook:WARRCOPY),
+  4 downstream, 3 direct / 3 transitive union, overlap
+  job:DAILY01+job:WARRBTCH+proc:WARRANTY, 7 tests (6 MUST_RUN, 1
+  SHOULD_RUN), 1 DB2 read, 2 DB2 writes, 7 signals, 7 checklist,
+  11 incidents.
+- Chromium verification (audit-tools Chrome via Playwright):
+  1440x900, 1280x800, 900x800 — all six tabs render, zero horizontal
+  overflow, zero page errors; five existing views unchanged (Release
+  Intelligence DETERMINISTIC SUMMARY spot-checked); sixth view shows
+  Changed Components, downstream-only impact, cross-impact line,
+  snapshot badges, and demo numbers matching CLI. Screenshots at
+  /tmp/changeset-{1440x900,1280x800,900x800}.png.
+- Known remaining limitations: L3/L4 (AI regex guard scope) not
+  redesigned per scope; change_set.files/mapped_changes preserve
+  input order (aggregates and prose are order-invariant); the
+  chunk-size build warning persists (documented).
+
+Stop: no commit, no merge, no push, no tag, no release, no Phase 3B.
+Branch left ready for final audit.
