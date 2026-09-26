@@ -1,0 +1,4 @@
+//CUSTOMER PROC
+//* CUSTOMER - customer maintenance procedure (SYNTHETIC)
+//STEP01   EXEC PGM=CUST001
+//         PEND

@@ -1,0 +1,5 @@
+//WARRANTY PROC
+//* WARRANTY - warranty claim processing procedure (SYNTHETIC)
+//STEP01   EXEC PGM=WARR002
+//STEP02   EXEC PGM=WARR001
+//         PEND
