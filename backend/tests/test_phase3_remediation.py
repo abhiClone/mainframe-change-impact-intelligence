@@ -608,8 +608,8 @@ def test_l1_valid_enum_values_accepted():
 # ------------------------------------------------------------------
 
 def test_l2_invalid_source_prefix_no_traceback(tmp_path: Path):
-    import os
     import subprocess as sp
+    import sys
 
     repo = tmp_path / "l2"
     (repo / "cobol").mkdir(parents=True)
@@ -626,7 +626,7 @@ def test_l2_invalid_source_prefix_no_traceback(tmp_path: Path):
     _git(repo, "commit", "-qam", "bump")
     proc = sp.run(
         [
-            os.path.join(os.getcwd(), ".venv", "bin", "python"),
+            sys.executable,
             "changeset.py",
             "--repo", str(repo),
             "--base", "HEAD~1",
