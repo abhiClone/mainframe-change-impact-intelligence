@@ -8,6 +8,45 @@ baselines keep their own frozen records at the repository root:
 - `PHASE2B_BASELINE.md` — Phase 2B: deterministic historical incident intelligence
 - `AUDITED_PRODUCT_BASELINE.md` — post-Phase-2B product audit remediation
 - `INTERVIEW_READY_BASELINE.md` — interview-ready product baseline (final graph + Release Intelligence UX)
+- `PHASE3A_BASELINE.md` — Phase 3A: deterministic change-set & release candidate analysis
+
+## [1.1.0] — 2026-09-26
+
+Phase 3A: deterministic change-set & release candidate analysis. The
+deterministic engine now covers complete multi-file release/change sets
+in addition to single-component changes.
+
+### Added
+- Multi-file deterministic change-set analysis.
+- Deterministic file-to-component mapping.
+- Ambiguous/unmapped change handling with honest zero-intelligence output.
+- Local Git diff provider.
+- Added/modified/deleted/renamed file support.
+- Multi-root impact aggregation with per-root provenance.
+- Cross-impact visibility between changed components.
+- Base/head snapshot provenance, including mixed base/head analysis.
+- Rename-aware old/base and new/head analysis.
+- Deduplicated test recommendations with strongest-priority aggregation.
+- Release-level DB2/resource intelligence with independent READ/WRITE semantics.
+- Aggregated risk signals, checklist items, and historical incidents.
+- Optional grounded AI release explanation (explanation only; guard-validated).
+- CLI (`changeset.py`) and API (`POST /api/change-set/analyze`) interfaces.
+- Release / Change Set UI (sixth frontend view).
+
+### Changed
+- Release-level changed components are now explicitly separated from downstream impacted components.
+- Direct/transitive release unions preserve per-root depth semantics: a component
+  can be direct from one changed root and transitive from another.
+
+### Security
+- Repository-path containment prevents traversal, absolute-path, and symlink-escape reads.
+- Git subprocess calls use argument arrays without shell execution; refs are validated.
+
+### Verification
+- 255 backend tests.
+- 34 frontend tests.
+- Production frontend build.
+- Chromium verification at 1440x900, 1280x800, and 900x800.
 
 ## [interview-ready] — 2026-09-26
 

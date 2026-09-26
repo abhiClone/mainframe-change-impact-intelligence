@@ -38,6 +38,26 @@ historical precedent — not a raw edge list. This project proves both can coexi
 deterministic core that never guesses, with an optional AI layer that is architecturally
 incapable of altering the core's results.
 
+## What's new in v1.1
+
+v1.1 extends the deterministic engine from single-component changes to complete
+multi-file release/change sets:
+
+- **Multi-file change-set analysis** — analyse a whole release candidate, not just one changed component
+- **Deterministic file → component mapping** — every changed file is mapped by the parsers, never by AI; ambiguous and unmapped files are reported honestly
+- **Changed vs downstream-impacted separation** — changed roots are never listed as downstream impact
+- **Cross-impact between changed components** — one changed root impacting another is shown explicitly
+- **Root-by-root impact provenance** — every aggregate cites which changed root it came from
+- **Base/head snapshot provenance** — deleted files are analysed on base, everything else on head; mixed snapshots are flagged
+- **Added / modified / deleted / renamed Git changes** — rename-aware old/base and new/head semantics
+- **Local Git diff analysis** — the CLI reads a Git range directly; the HTTP API accepts explicit file lists only and never takes repository paths
+- **Deduplicated regression-test recommendations** — strongest priority (`MUST_RUN` > `SHOULD_RUN`) wins per test, reasons preserved
+- **Release-level DB2/resource intelligence** — `READ` and `WRITE` kept independent
+- **Aggregated risks / checklist / incidents** — deterministic merge of per-root release intelligence
+- **Release / Change Set UI** — sixth frontend view with changed/downstream separation, overlap, provenance, and ambiguity views
+
+The deterministic-first principle is unchanged: AI may only explain verified results, never determine them.
+
 ## Capabilities
 
 | Capability | How |
@@ -329,8 +349,8 @@ parsing, not from AI. Details: `docs/AI_GROUNDING.md`, `docs/EVIDENCE_MODEL.md`.
 
 | Suite | Result |
 |---|---|
-| Backend (`pytest backend/tests/`) | **166 passed, 0 failed** |
-| Frontend (`npm test`, Vitest) | **17 passed, 0 failed** |
+| Backend (`pytest backend/tests/`) | **255 passed, 0 failed** |
+| Frontend (`npm test`, Vitest) | **34 passed, 0 failed** |
 | Production build (`npm run build`) | ✅ tsc + vite succeed (non-blocking Cytoscape chunk-size warning) |
 | Browser verification | Real Chromium at 1440×900, 1280×800, 900×800 — graph render, zoom/pan, Fit/Reset, evidence panel, parallel-edge click, intelligence view, empty states |
 
@@ -346,7 +366,8 @@ parsing, not from AI. Details: `docs/AI_GROUNDING.md`, `docs/EVIDENCE_MODEL.md`.
 ## Roadmap
 
 Frozen phases: Phase 1 (dependency engine) → Phase 2A (release intelligence + grounded AI) →
-Phase 2B (incident intelligence) → audit remediation → interview-ready UX baseline.
+Phase 2B (incident intelligence) → audit remediation → interview-ready UX baseline →
+Phase 3A (change-set & release candidate analysis, **v1.1.0**).
 Future candidates (not started): grammar-based COBOL parsing, CICS/IMS/MQ dependencies,
 persistent graph backend, real incident-source integrations, live LLM provider testing.
 Explicitly out of scope: automated release verdicts, failure-probability prediction, and any

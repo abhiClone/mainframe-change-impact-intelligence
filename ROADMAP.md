@@ -11,15 +11,14 @@ before work begins.
 - ✅ Phase 2B — deterministic historical incident intelligence
 - ✅ Audit remediation — reproducible setup, validation, UI trust tests
 - ✅ Interview-ready baseline — final graph and Release Intelligence UX
-
-## In development (branch `phase3-changeset-analysis`, not released)
-
-- 🔨 Phase 3A — deterministic change-set & release candidate analysis:
-  file→component mapping, git-diff provider, multi-root aggregation with
-  provenance, change-set AI explanation (guarded). Frozen Phase 1/2A/2B
-  semantics unchanged; nothing merged, tagged, or published yet.
+- ✅ Phase 3A — deterministic change-set & release candidate analysis
+  (completed — released in **v1.1.0**, 2026-09-26)
 
 ## Possible future phases (not started)
+
+### Phase 3B (future — does not exist yet)
+- GitHub Pull Request integration: analyse the files changed by a PR as a
+  Phase 3A change set directly from the PR diff. Not implemented.
 
 ### Phase 3 candidates
 - Real mainframe source parsing at scale: grammar/AST-based COBOL parser

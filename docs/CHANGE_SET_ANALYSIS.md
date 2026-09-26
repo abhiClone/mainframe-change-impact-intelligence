@@ -1,6 +1,6 @@
 # Change-Set & Release Candidate Analysis (Phase 3A)
 
-**Status: development branch `phase3-changeset-analysis` — not released, not tagged.**
+**Status: released in v1.1.0** (frozen 2026-09-26 as tag `phase3a-complete`, merged into `main`).
 
 Phase 3A answers a release-manager question: *given a set of changed
 files (a release candidate), what is the combined, deduplicated impact
