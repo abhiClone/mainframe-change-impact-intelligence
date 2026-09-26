@@ -12,6 +12,13 @@ before work begins.
 - ✅ Audit remediation — reproducible setup, validation, UI trust tests
 - ✅ Interview-ready baseline — final graph and Release Intelligence UX
 
+## In development (branch `phase3-changeset-analysis`, not released)
+
+- 🔨 Phase 3A — deterministic change-set & release candidate analysis:
+  file→component mapping, git-diff provider, multi-root aggregation with
+  provenance, change-set AI explanation (guarded). Frozen Phase 1/2A/2B
+  semantics unchanged; nothing merged, tagged, or published yet.
+
 ## Possible future phases (not started)
 
 ### Phase 3 candidates

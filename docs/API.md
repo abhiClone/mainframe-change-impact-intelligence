@@ -83,6 +83,35 @@ Relevant incidents with deterministic reasons: `incidents[]` (each with `reasons
 and `primary_reason`), `total_relevant_incidents`, `primary_tier_counts`,
 `reason_counts`.
 
+### `POST /api/change-set/analyze`
+
+Change-set (release candidate) analysis. The request supplies changed-file
+metadata only — the API never accepts repository or filesystem paths:
+
+```json
+{
+  "files": [
+    {"path": "copybook/WARRCOPY.cpy", "status": "modified"},
+    {"path": "cobol/WARR002.cbl", "status": "modified"}
+  ],
+  "resolutions": {"sql/schema.sql": ["table:WARRANTY"]},
+  "fake_ai": false
+}
+```
+
+Statuses: `modified` (default), `added`, `deleted`, `renamed`. Returns the
+full `ChangeSetIntelligence`: file→component mapping (mapped / ambiguous
+with candidates / unmapped / requires_base_snapshot), per-change analysis,
+`changed_components` (explicit roots, disjoint from downstream impact,
+with cross-impact and snapshot provenance), deduplicated downstream
+union with root and snapshot provenance, overlap detection,
+`mixed_snapshot_analysis`, `summary`, `deterministic_summary`, and
+`ai_explanation` (`explanation_source`: `deterministic` | `ai`).
+Ambiguous files with no resolution contribute no impact — nothing is
+auto-selected. Invalid resolutions return HTTP 400; malformed payloads
+return HTTP 422. Duplicate `(path, old_path, status)` entries are
+deduplicated; conflicting statuses for one path are rejected (400).
+
 ## Notes for integrators
 
 - The graph is built once at API startup from `sample_mainframe/`; it is in-memory

@@ -24,6 +24,13 @@ flowchart LR
     M --> N
     N --> O["API bundle\n+ UI views"]
     H --> P["CLI\nanalyze.py / impact.py"]
+
+    CS["changed files\n(explicit list or git diff)"] --> MAP["FileComponentMapper\nmapped / ambiguous / unmapped\n/ requires_base_snapshot"]
+    MAP --> PER["per change root:\nImpactAnalyzer + rules + incidents\n(on head or base-snapshot graph)"]
+    PER --> AGG["ChangeSetAggregator\nunion · dedup · overlap · provenance\nstrongest test priority wins"]
+    AGG --> N2["explain_change_set()\nstrict context → provider → guard"]
+    N2 --> O2["API bundle\nPOST /api/change-set/analyze\n+ Release / Change Set view"]
+    PER --> CLI2["CLI\nchangeset.py"]
 ```
 
 ## Request flow: `GET /api/intelligence/copybook:WARRCOPY`
@@ -79,6 +86,10 @@ backwards. Direct = distance 1, transitive = distance ≥ 2.
 |---|---|
 | Unknown component id | CLI: clear error · API: HTTP 404 |
 | Component with no dependents (`copybook:UNUSED`) | Empty impact sets, empty paths, empty evidence — a valid zero result |
+| Ambiguous change-set file, no resolution | Candidates surfaced; nothing auto-selected; no impact contributed |
+| Unmapped change-set file (e.g. `README.md`) | Stays visible; contributes no Mainframe impact |
+| Deleted change-set file, no base snapshot | `requires_base_snapshot`; uncertainty reported, no impact guessed |
+| Invalid change-set resolution | CLI: clear error · API: HTTP 400 |
 | Malformed `incidents.yaml` / `test_catalog.yaml` | Controlled domain error (HTTP 500 naming the problem), never a traceback |
 | LLM provider misconfigured / unreachable / guard rejection | Deterministic fallback explanation; deterministic results unaffected |
 | Unknown `INTELLIGENCE_PROVIDER` value | Silently falls back to `deterministic` |

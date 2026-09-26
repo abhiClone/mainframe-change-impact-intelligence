@@ -22,6 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.graph.dependency_graph import DependencyGraph
 from backend.graph.impact_analyzer import ImpactAnalyzer
 from backend.parsers.repository_scanner import scan_repository
+from backend.api.changeset import router as changeset_router
 from backend.api.intelligence import router as intelligence_router
 
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -33,7 +34,7 @@ app = FastAPI(title="Mainframe Change Impact API",
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Phase 1: local dev only
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST"],  # POST added for Phase 3A change-set analysis
     allow_headers=["*"],
 )
 
@@ -46,6 +47,7 @@ def _build() -> tuple[DependencyGraph, ImpactAnalyzer]:
 
 GRAPH, ANALYZER = _build()
 app.include_router(intelligence_router)  # Phase 2A intelligence endpoints
+app.include_router(changeset_router)  # Phase 3A change-set endpoints (additive)
 
 
 def _require(component_id: str) -> None:

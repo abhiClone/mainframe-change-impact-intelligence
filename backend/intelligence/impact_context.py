@@ -51,12 +51,18 @@ def _edge(step: dict) -> PathEdge:
     )
 
 
-def build_impact_context(component_id: str) -> ImpactContext:
-    """Build the deterministic impact context for a component.
+def build_impact_context_on(
+    graph: DependencyGraph,
+    analyzer: ImpactAnalyzer,
+    component_id: str,
+) -> ImpactContext:
+    """Build the deterministic impact context on an explicit graph/analyzer.
 
-    Raises KeyError for an unknown component id (Phase 1 behavior).
+    Identical decision semantics to :func:`build_impact_context`; the only
+    difference is the graph source. Exists so Phase 3A can analyze
+    base-snapshot graphs (deleted components) without touching Phase 1 or
+    Phase 2A behavior — existing callers are unaffected.
     """
-    graph, analyzer = _shared()
     if not graph.has(component_id):
         raise KeyError(f"unknown component: {component_id}")
 
@@ -123,6 +129,16 @@ def build_impact_context(component_id: str) -> ImpactContext:
                                  default=0),
         total_impacted_components=len(impacted_ids),
     )
+
+
+def build_impact_context(component_id: str) -> ImpactContext:
+    """Build the deterministic impact context for a component.
+
+    Raises KeyError for an unknown component id (Phase 1 behavior).
+    Uses the shared process-wide Phase 1 graph; behavior is unchanged.
+    """
+    graph, analyzer = _shared()
+    return build_impact_context_on(graph, analyzer, component_id)
 
 
 def _involved_resources(

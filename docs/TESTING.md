@@ -62,3 +62,24 @@ horizontal overflow at 900px.
 .venv/bin/python -m pytest backend/tests/ -q
 cd frontend && npm test && npm run build
 ```
+
+## Phase 3A (in development, unreleased)
+
+On the `phase3-changeset-analysis` branch (not merged, not tagged):
+
+- **Backend: 219 passed, 0 failed** — 166 frozen-phase tests unchanged +
+  53 Phase 3A tests: `test_phase3_mapping_providers.py` (24: file→component
+  mapping statuses, explicit/git providers on temporary repos only, base
+  snapshots, unsafe-ref rejection, PROC mapping via the deterministic parser
+  fallback, foreign-tree test-catalog selection and controlled catalog errors)
+  and `test_phase3_aggregation.py` (29: multi-root dedup + provenance,
+  strongest-priority-wins, READ/WRITE independence, UNUSED negative control,
+  mixed mapped/unmapped sets, AI guard rejection of hallucinated ids, API
+  validation).
+- **Frontend: 30 passed, 0 failed** — 17 frozen-phase tests unchanged +
+  13 Phase 3A tests for the new `ChangeSetView` (sixth view; demo preset
+  populates input only, results from the backend; `VERIFIED CHANGE SET` /
+  `VERIFIED IMPACT` / `DETERMINISTIC SUMMARY` / `AI EXPLANATION` badges).
+- Frozen baseline counts (166 / 17) above describe the tagged
+  `v1.0.0`/`interview-ready-baseline` state; the branch adds to them without
+  changing frozen behaviour.

@@ -40,6 +40,26 @@ either pinned by a test, documented in code, or both.
   The guard validates identifiers, not prose; deterministic evidence remains the
   source of truth.
 
+## Change-set analysis
+
+- **Ambiguous mappings need a human decision.** A file like `sql/schema.sql`
+  declares many tables; the platform surfaces candidates and never
+  auto-selects.
+- **Deletions need a base snapshot.** A deleted file that no longer exists
+  in the scanned tree can only be resolved when base bytes are available
+  (git mode); otherwise uncertainty is reported.
+- **Git mode is CLI-only.** The HTTP API accepts explicit file lists only —
+  it never takes repository or filesystem paths.
+- **Rename identity follows frozen Phase 1 rules.** COBOL program and
+  copybook identity is filename-derived, so renaming such a file always
+  changes the component identity; SQL table identity comes from DDL
+  content, so a pure DDL rename keeps the identity.
+- **Path containment is enforced, not guessed.** Absolute paths,
+  Windows drive/UNC paths, `..` segments, and symlink escapes are
+  rejected; the platform never reads outside the analyzed tree.
+- **No opaque release-risk score.** The platform aggregates evidence;
+  release judgement stays with humans.
+
 ## Frontend build
 
 - **Vite/Cytoscape produces a non-blocking chunk-size warning** on build.

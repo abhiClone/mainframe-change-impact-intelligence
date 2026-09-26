@@ -70,3 +70,16 @@ a deliberate demo asset.
 No step above involves an LLM. Identifiers, counts, selections, and orderings are produced by
 pure deterministic functions; re-running the same query on the same repository yields
 byte-identical results. The optional AI layer can only *rephrase* what these steps produced.
+
+## Release candidates: more than one changed file
+
+`changeset.py` (CLI), `POST /api/change-set/analyze`, and the **Release / Change Set** UI view
+lift the pipeline to change sets. Each changed file is mapped to its component(s) using the
+parsers' `source_file` metadata — ambiguous files (e.g. `sql/schema.sql`, which declares many
+tables) surface candidates for a human to resolve; unmapped files (e.g. `README.md`) stay
+visible and contribute no Mainframe impact; deleted files are resolved from a git base
+snapshot when one is available, otherwise reported as uncertain. Each mapped component then
+goes through the exact pipeline above, and the results are merged at the release level:
+deduplicated impact union with per-root provenance, impact-overlap detection, strongest-priority
+test merge (`MUST_RUN > SHOULD_RUN`), merged DB2 resources, signals, checklist, and incidents.
+Full rules: `docs/CHANGE_SET_ANALYSIS.md`.
