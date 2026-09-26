@@ -3,6 +3,7 @@ import Overview from "./views/Overview";
 import Explorer from "./views/Explorer";
 import ImpactView from "./views/ImpactView";
 import GraphView from "./views/GraphView";
+import IntelligenceView from "./views/IntelligenceView";
 import { API_BASE } from "./api";
 import "./App.css";
 
@@ -11,6 +12,7 @@ const TABS = [
   { id: "explorer", label: "Dependency Explorer" },
   { id: "impact", label: "Change Impact" },
   { id: "graph", label: "Graph" },
+  { id: "intelligence", label: "Release Intelligence" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -47,6 +49,7 @@ export default function App() {
         {tab === "explorer" && <Explorer />}
         {tab === "impact" && <ImpactView />}
         {tab === "graph" && <GraphView key="graph" />}
+        {tab === "intelligence" && <IntelligenceView />}
       </main>
 
       <footer className="app-footer">

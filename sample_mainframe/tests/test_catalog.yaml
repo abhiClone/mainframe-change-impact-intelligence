@@ -1,0 +1,134 @@
+# Synthetic test catalog for the Phase 2A test recommendation engine.
+# All covers[] entries are real component ids from the frozen Phase 1
+# dependency graph. execution.job is always a real JCL job.
+tests:
+  - id: TC-WARR-001
+    name: Warranty claim batch end-to-end
+    type: batch
+    covers:
+      - program:WARR001
+      - program:WARR002
+      - job:WARRBTCH
+      - proc:WARRANTY
+      - table:WARRANTY
+    execution: {job: WARRBTCH}
+    description: Runs the nightly WARRBTCH warranty job and validates claim
+      processing from WARR001 through the WARRANTY proc chain.
+
+  - id: TC-WARR-002
+    name: Warranty copybook regression
+    type: regression
+    covers:
+      - copybook:WARRCOPY
+      - program:WARR001
+      - program:WARR002
+    execution: {job: WARRBTCH}
+    description: Recompiles and regression-tests every program using the
+      WARRCOPY layout after a record-layout change.
+
+  - id: TC-WARR-003
+    name: Claim history DB2 write validation
+    type: database
+    covers:
+      - program:WARR002
+      - table:CLAIM_HISTORY
+      - table:WARRANTY
+    execution: {job: WARRBTCH}
+    description: Verifies WARR002 writes claim rows to CLAIM_HISTORY and
+      WARRANTY and that the rows can be rolled back on failure.
+
+  - id: TC-CUST-001
+    name: Customer daily batch functional
+    type: functional
+    covers:
+      - job:DAILY01
+      - program:CUST001
+      - table:CUSTOMER
+    execution: {job: DAILY01}
+    description: Functional pass over the DAILY01 customer batch driven by
+      CUST001 against the CUSTOMER table.
+
+  - id: TC-CUST-002
+    name: Customer copybook regression
+    type: regression
+    covers:
+      - copybook:CUSTCOPY
+      - program:CUST001
+      - program:CUST002
+      - program:WARR001
+    execution: {job: DAILY01}
+    description: Regression-tests all consumers of the CUSTCOPY layout,
+      including the warranty program that reuses it.
+
+  - id: TC-CUST-003
+    name: Customer DB2 read/write validation
+    type: database
+    covers:
+      - program:CUST001
+      - program:CUST002
+      - table:CUSTOMER
+    execution: {job: DAILY01}
+    description: Validates CUSTOMER table reads by CUST001/CUST002 and the
+      CUST001 write path.
+
+  - id: TC-CUST-004
+    name: Nightly customer job batch
+    type: batch
+    covers:
+      - job:NIGHT01
+      - proc:CUSTOMER
+      - program:CUST002
+    execution: {job: NIGHT01}
+    description: Runs the NIGHT01 job through the CUSTOMER proc and checks
+      CUST002 output.
+
+  - id: TC-VEH-001
+    name: Vehicle copybook regression
+    type: regression
+    covers:
+      - copybook:VEHCOPY
+      - program:VEH001
+      - program:CUST001
+    execution: {job: DAILY01}
+    description: Regression-tests the consumers of the VEHCOPY layout.
+
+  - id: TC-VEH-002
+    name: Vehicle table DB2 validation
+    type: database
+    covers:
+      - program:VEH001
+      - table:VEHICLE
+    execution: {job: DAILY01}
+    description: Validates VEH001 reads and writes against the VEHICLE table.
+
+  - id: TC-IFACE-001
+    name: CUST001-to-CUST002 interface contract
+    type: interface
+    covers:
+      - program:CUST001
+      - program:CUST002
+    execution: {job: DAILY01}
+    description: Contract test for the CALL interface between CUST001 and
+      CUST002 (linkage layout, return codes).
+
+  - id: TC-PROC-001
+    name: WARRANTY proc execution chain
+    type: integration
+    covers:
+      - proc:WARRANTY
+      - job:WARRBTCH
+      - job:DAILY01
+      - program:WARR002
+    execution: {job: WARRBTCH}
+    description: Integration test of the WARRANTY proc steps as invoked by
+      the WARRBTCH and DAILY01 jobs.
+
+  - id: TC-DB2-001
+    name: Warranty table write regression
+    type: database
+    covers:
+      - table:WARRANTY
+      - program:WARR001
+      - program:WARR002
+    execution: {job: WARRBTCH}
+    description: Regression coverage for every writer of the WARRANTY table.

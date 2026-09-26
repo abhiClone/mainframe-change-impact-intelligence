@@ -22,6 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.graph.dependency_graph import DependencyGraph
 from backend.graph.impact_analyzer import ImpactAnalyzer
 from backend.parsers.repository_scanner import scan_repository
+from backend.api.intelligence import router as intelligence_router
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 REPO_DIR = BASE_DIR / "sample_mainframe"
@@ -44,6 +45,7 @@ def _build() -> tuple[DependencyGraph, ImpactAnalyzer]:
 
 
 GRAPH, ANALYZER = _build()
+app.include_router(intelligence_router)  # Phase 2A intelligence endpoints
 
 
 def _require(component_id: str) -> None:

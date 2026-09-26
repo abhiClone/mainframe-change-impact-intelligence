@@ -211,3 +211,348 @@ Verification (executed by the subagent, artifacts confirmed by coordinator):
   components / 30 dependencies (7/7/5/5/3/3, unchanged -- repo had no
   literal-keyword false positives); impact.py WARRCOPY and UNUSED outputs
   identical to audit baseline. No Phase 2 work started.
+
+## 2026-09-26 — Phase 2A AI explanation layer (`backend/intelligence/ai/`)
+
+Built the optional, grounded AI explanation layer. Phase 1 files untouched
+(`git diff HEAD -- backend/models backend/parsers backend/graph backend/api`
+empty); only tracked-file change is `.gitignore` (+ `.env`).
+
+Files created:
+- `backend/intelligence/ai/__init__.py` — package docstring.
+- `backend/intelligence/ai/ai_models.py` — Pydantic v2: `IntelligenceContext`
+  (strict input contract: changed_component, impacted_components,
+  dependency_paths, evidence, recommended_tests, risk_signals,
+  release_checklist) and `IntelligenceExplanation` (executive_summary,
+  technical_summary, testing_summary, release_considerations).
+- `backend/intelligence/ai/providers.py` — `IntelligenceProvider` ABC
+  (`name` property, `explain(context)`); `DeterministicProvider`
+  (template-built, context-only); `FakeProvider` (canned text interpolating
+  only context IDs); `HttpLlmProvider` (stdlib urllib chat-completions
+  client, env-only config: INTELLIGENCE_PROVIDER=http,
+  INTELLIGENCE_LLM_ENDPOINT / INTELLIGENCE_LLM_API_KEY /
+  INTELLIGENCE_LLM_MODEL; system instruction forbids introducing
+  identifiers not in the context); `get_provider()` (default deterministic;
+  unknown INTELLIGENCE_PROVIDER value -> deterministic, no crash).
+- `backend/intelligence/ai/guard.py` — `validate_explanation()` builds the
+  allowed vocabulary (changed_component + impacted_components + test_ids +
+  signal ids) and regex-extracts candidate IDs from all four text fields
+  (`\b(?:program|job|proc|copybook|table):[A-Za-z0-9_#.-]+\b`,
+  `\bTC-[A-Za-z0-9-]+\b`); unknown candidates raise
+  `HallucinationError(offending: list[str])`.
+- `backend/intelligence/ai/service.py` — `explain_change(impact_ctx,
+  recommendations, signals, checklist, provider=None)` builds the
+  IntelligenceContext from the sibling models (imported from
+  `backend.intelligence.models`: ImpactContext, RecommendedTest, RiskSignal,
+  ChecklistItem — landed by the parallel track; field names matched the
+  spec exactly), runs provider + guard; on HallucinationError or any
+  provider exception (including HttpLlmProvider misconfiguration) returns
+  the DeterministicProvider explanation with executive_summary prefixed by
+  "AI explanation unavailable. Deterministic analysis remains available. ".
+- `.env.example` (repo root) — INTELLIGENCE_PROVIDER=deterministic plus
+  commented-out LLM vars with "never commit real keys" note. `.env`
+  appended to `.gitignore`. No real API keys anywhere.
+- `backend/tests/test_phase2_ai.py` — 12 tests: provider selection
+  (default/unknown/fake), service with default provider, fake provider
+  validity, hallucinated component ID rejection (program:FAKE999),
+  hallucinated test ID rejection (TC-FAKE-999), real context IDs passing,
+  deterministic output containing only known IDs, service fallback for a
+  hallucinating provider / an exploding provider / misconfigured http.
+
+Commands run / outcomes:
+- `.venv/bin/python -m pytest backend/tests/test_phase2_ai.py -q` -> 12 passed.
+- `.venv/bin/python -m pytest backend/tests/ -q` -> 70 passed, 4 failed.
+  The 4 failures are all in `backend/tests/test_phase2_intelligence.py`
+  (the parallel track's test selector/checklist assertions); that module
+  does not import anything from `backend/intelligence/ai/`.
+- Phase 1 regression: `pytest backend/tests/test_phase1.py
+  backend/tests/test_parser_robustness.py -q` -> 41 passed, 0 failed.
+
+Scope respected: no API endpoints, no UI, no incident correlation,
+CICS/IMS/MQ, Neo4j, integrations, or Phase 3 work.
+
+## 2026-09-26 — Phase 2A deterministic intelligence core (this track)
+
+Files created:
+- `backend/intelligence/__init__.py` — package exports.
+- `backend/intelligence/models.py` — Pydantic v2 models: EvidenceRef,
+  PathEdge, DependencyPath, ImpactContext, TestCase, RecommendedTest,
+  RiskSignal, ChecklistItem (exact names/fields per spec).
+- `backend/intelligence/impact_context.py` — `build_impact_context(
+  component_id) -> ImpactContext`, built ONLY from Phase 1
+  `ImpactAnalyzer.analyze()` output + graph component types; raises
+  KeyError for unknown ids (Phase 1 behavior). Lazy singleton graph build.
+- `backend/intelligence/test_catalog.py` — `load_catalog() ->
+  list[TestCase]`; YAML path resolved from the module location.
+- `backend/intelligence/test_selector.py` — `recommend_tests(ctx,
+  catalog) -> list[RecommendedTest]`; deterministic rule with MUST_RUN /
+  SHOULD_RUN levels, machine-generated rationale with concrete chain +
+  file:line evidence, deduped evidence, sorted by (impact_level, test_id).
+- `backend/intelligence/risk_signals.py` — `detect_risk_signals(ctx) ->
+  list[RiskSignal]`; 8 rules: SHARED_COPYBOOK_CHANGE (medium),
+  MULTIPLE_PROGRAMS_IMPACTED (medium), MULTIPLE_BATCH_JOBS_IMPACTED
+  (medium), DB2_WRITE_INVOLVED (high), MULTIPLE_DB2_TABLES_IMPACTED
+  (medium), TRANSITIVE_IMPACT (low), HIGH_FAN_OUT (medium),
+  MULTIPLE_EXECUTION_PATHS (low). All ids/evidence grounded in real data.
+- `backend/intelligence/release_checklist.py` — `build_checklist(ctx,
+  signals) -> list[ChecklistItem]` with rules jobs_impacted,
+  db2_write_involved, db2_read_involved, shared_copybook_change,
+  procs_affected, transitive_impact, high_fan_out; each item cites its rule.
+- `sample_mainframe/tests/test_catalog.yaml` — 12 synthetic tests
+  (TC-WARR-001..003, TC-CUST-001..004, TC-VEH-001..002, TC-IFACE-001,
+  TC-PROC-001, TC-DB2-001); all covers[] use real component ids, all
+  execution.job values are real jobs. Scanner ignores `tests/`, so the
+  Phase 1 graph is unchanged (verified: 18 components, 30 deps).
+- `backend/tests/test_phase2_intelligence.py` — 36 business-behavior tests.
+
+Files modified:
+- `requirements.txt` — added `pyyaml` (allowed; not a Phase 1 file).
+  Installed pyyaml-6.0.3 into `.venv`.
+
+Commands run / outcomes:
+- `.venv/bin/python -m pytest backend/tests/ -q` -> 77 passed, 0 failed
+  (41 Phase 1 + 36 Phase 2A). Note: an earlier sibling-track log entry
+  recorded 4 failures in `test_phase2_intelligence.py`; those were this
+  track's own incorrect test assumptions (read/write-table expectations
+  for a copybook change) and are fixed — the full suite is green.
+
+Verified behaviors (all via tests):
+- copybook:WARRCOPY -> 2 direct / 3 transitive impacts, depth >= 2,
+  7 recommended tests, SHARED_COPYBOOK_CHANGE fires with WARR001/WARR002
+  evidence, deterministic selection (repeat runs identical).
+- copybook:UNUSED -> zero recommendations AND zero risk signals.
+- table:WARRANTY -> DB2_WRITE_INVOLVED severity high; read_tables and
+  write_tables kept distinguishable (table:CLAIM_HISTORY: read=[] / write
+  present).
+- Unknown component id raises KeyError.
+
+Semantic note: read_tables/write_tables are derived from READS_TABLE /
+WRITES_TABLE edges in the Phase 1 analyze() evidence set (impact-path
+evidence), per spec. For a copybook change these are legitimately empty
+(tables sit upstream of impacted programs, never on impact paths); they
+are populated for table changes (e.g. table:WARRANTY, table:CLAIM_HISTORY).
+
+Scope respected: no Phase 1 file modified (graph still 18 components /
+30 deps, all 41 Phase 1 tests pass); no incident correlation, CICS/IMS/MQ,
+Neo4j, integrations, API, UI, AI layer, or Phase 3.
+
+---
+
+## Phase 2A API track (2026-09-26)
+
+Files created:
+- backend/api/intelligence.py: FastAPI APIRouter with GET /api/intelligence/{component_id}
+  (full bundle: changed_component, impact, recommended_tests, risk_signals,
+  release_checklist, ai_explanation), GET /api/test-recommendations/{component_id},
+  GET /api/risk-signals/{component_id}, GET /api/test-catalog. Composes the
+  intelligence services (build_impact_context -> load_catalog ->
+  recommend_tests -> detect_risk_signals -> build_checklist -> explain_change);
+  no Phase 1 dependency logic duplicated. 404 on unknown component.
+- backend/tests/test_phase2_api.py: 10 tests using fastapi.testclient.TestClient.
+
+Files modified:
+- backend/api/app.py: two lines only — import intelligence router and
+  app.include_router(intelligence_router). No existing endpoint touched.
+
+Environment note:
+- Installed httpx2 into .venv (required by starlette's TestClient).
+
+Commands run and outcomes:
+- `.venv/bin/pip install httpx2` — ok
+- `.venv/bin/python -m pytest backend/tests/test_phase2_api.py -q` — 10 passed
+  (after fixing two test assertions: IntelligenceExplanation fields are
+  executive_summary/technical_summary/testing_summary/release_considerations;
+  RecommendedTest uses impact_level, not priority)
+- `.venv/bin/python -m pytest backend/tests/ -q` — 87 passed (41 Phase 1 +
+  46 Phase 2, all green)
+
+Verified behaviors (via tests):
+- copybook:WARRCOPY intelligence bundle returns all six top-level keys with
+  non-empty recommended_tests, risk_signals, release_checklist and a valid
+  ai_explanation (non-empty executive_summary).
+- copybook:UNUSED -> empty recommended_tests and empty risk_signals.
+- table:WARRANTY -> DB2_WRITE_INVOLVED signal present with severity high.
+- /api/test-catalog returns exactly 12 tests.
+- Unknown component id -> 404 on all three component-scoped intelligence endpoints.
+- Phase 1 spot-check: /api/impact/copybook:WARRCOPY still 200.
+
+## 2026-09-26 — Phase 2A documentation (docs-only; no code changed)
+
+Wrote four interview-quality design docs, grounded by reading the actual
+implemented code in `backend/intelligence/` + `backend/intelligence/ai/`
+(never describing planned functionality as completed). Phase 1 untouched.
+API/UI tracks not yet present in the repo — documented against the backend
+intelligence + AI code only, noted as "see implementation."
+
+- `docs/phase2-architecture.md` — the layered pipeline (source → frozen
+  Phase 1 parsers → graph → deterministic impact → ImpactContext → test
+  selection + risk signals + checklist → optional AI explanation → UI),
+  per-layer ownership/forbidden-acts table, text component diagram, and the
+  data flow for `GET /api/intelligence/{component_id}`.
+- `docs/test-recommendation-model.md` — catalog schema, the deterministic
+  selection rule (`coverage ∩ impact set`), MUST_RUN/SHOULD_RUN exact logic,
+  rationale format, a real executed example (change to `copybook:WARRCOPY` →
+  6 MUST_RUN + 1 SHOULD_RUN with verbatim rationales such as
+  `program:WARR001 --USES_COPYBOOK--> copybook:WARRCOPY (cobol/WARR001.cbl:15)`),
+  and why OPTIONAL was omitted.
+- `docs/risk-signal-model.md` — all 8 implemented signals (id, trigger
+  rule, severity logic, real example with evidence), the severity scale
+  (high = persistent-data corruption consequence class), the explicit
+  no-failure-probabilities statement, and the 7 checklist rules with their
+  rule citations.
+- `docs/ai-grounding.md` — what the AI may do (summarize/explain the four
+  sections) vs the 7 prohibitions, the `IntelligenceProvider` abstraction
+  (deterministic / fake / http), the strict `IntelligenceContext` input
+  contract, the hallucination guard mechanism (allowed vocabulary + regex
+  extraction + `HallucinationError` + fallback), fallback prefix behavior,
+  and the `.env.example` / no-keys-in-repo policy.
+
+Verification of documented examples: ran `build_impact_context`,
+`recommend_tests`, `detect_risk_signals`, `build_checklist` for
+`copybook:WARRCOPY` (direct 2 / transitive 3, depth 2, 7 recommendations,
+6 signals, 5 checklist items) — all doc examples are real outputs.
+
+## 2026-09-26 — Phase 2A frontend: Release Intelligence view (frontend track)
+
+Files created:
+- `frontend/src/views/IntelligenceView.tsx` — new "Release Intelligence"
+  view. Component-id input (default `copybook:WARRCOPY`, editable) +
+  Analyze button. Sections: Change Summary, Impacted Components (grouped
+  by type: programs/copybooks/jobs/procs/tables), Dependency paths,
+  Recommended Tests, Release-Risk Signals, Release Checklist, AI
+  Explanation, Evidence. Deterministic sections carry a "VERIFIED IMPACT"
+  badge; only the AI section carries an "AI EXPLANATION" badge (green vs
+  purple styling, `App.css`). AI fallback (executive_summary starting
+  with "AI explanation unavailable.") renders a warning banner and shows
+  the deterministic fallback text. Zero-impact / zero-test / zero-signal
+  cases (e.g. `copybook:UNUSED`) render clean empty states with no fake
+  content. Path hops and evidence refs reuse the existing EvidencePanel.
+
+Files modified (additive only, Phase 1 views untouched):
+- `frontend/src/api.ts` — added Phase 2A types (`IntelligenceResult`,
+  `IntelligenceImpact`, `RecommendedTest`, `RiskSignal`,
+  `ReleaseChecklistItem`, `AiExplanation`, `TestCatalogEntry`) and
+  `api.intelligence(id)` / `api.testCatalog()` client functions. No
+  existing Phase 1 type or endpoint changed.
+- `frontend/src/App.tsx` — added the "Release Intelligence" tab + route.
+- `frontend/src/App.css` — added provenance/priority/severity badge styles
+  and intel list/item styles. No Phase 1 rule changed.
+
+Verification (all commands actually run):
+- Started backend: `.venv/bin/python -m uvicorn backend.api.app:app --port 8000`
+  (parallel API track's endpoints present).
+- `curl /api/intelligence/copybook:WARRCOPY` -> 200: 2 direct / 3
+  transitive impacts, depth 2, 5 total, 7 recommended tests (MUST_RUN /
+  SHOULD_RUN), 6 risk signals (SHARED_COPYBOOK_CHANGE etc.), 5 checklist
+  items, ai_explanation with 4 grounded summaries. Payload shape matches
+  the TS types field-for-field.
+- `curl /api/intelligence/copybook:UNUSED` -> 200: 0 impacted, 0 tests,
+  0 signals, 0 checklist, non-fallback AI summary present.
+- `curl /api/test-catalog` -> 200: 12 entries, 6 test types.
+- Grep of `frontend/src` for hard-coded component/test/signal ids beyond
+  the input default `copybook:WARRCOPY` (also present in Phase 1
+  ImpactView) found nothing; no deterministic result data invented
+  client-side.
+- `npm run build` -> tsc -b + vite build, zero errors (only the
+  pre-existing cytoscape chunk-size warning). `npm run lint` -> 0 errors,
+  1 pre-existing warning in Phase 1 `EdgeList.tsx`.
+- Scope respected: no backend changes made by this track; no Phase 1
+  frontend file modified beyond the additive tab/route/css/api additions.
+
+## Phase 2A targeted correction (2026-09-26, uncommitted)
+
+Correction per review: separate reverse-impacted components from involved
+DB2 resources, generate DB2 rules from involved resources, and fix
+deterministic-vs-AI explanation labeling.
+
+Changes:
+- `backend/intelligence/models.py`: added `InvolvedResource`
+  (table/access/used_by/evidence); `ImpactContext` gains
+  `involved_resources`, keeps `read_tables`/`write_tables` as
+  involved-resource projections.
+- `backend/intelligence/impact_context.py`: `build_impact_context()`
+  collects involved resources from the impacted programs' outgoing Phase 1
+  `READS_TABLE`/`WRITES_TABLE` edges (via `graph.upstream`, Phase 1
+  traversal untouched). Impact paths no longer double as the DB2 source.
+- `backend/intelligence/risk_signals.py`: `DB2_WRITE_INVOLVED` now fires
+  from involved write resources (writers + tables as supporting
+  components, write evidence attached).
+- `backend/intelligence/release_checklist.py`: `CHK-DB2-WRITE` /
+  `CHK-DB2-READ` now fire from involved resources.
+- `backend/intelligence/ai/ai_models.py`: `IntelligenceExplanation` gains
+  `subject_component` and `explanation_source` (`deterministic` | `ai`).
+- `backend/intelligence/ai/providers.py`: providers emit correct source
+  metadata; HTTP provider fills both fields when the model omits them.
+- `backend/intelligence/ai/service.py`: `explain_change()` stamps
+  `explanation_source` authoritatively (provider cannot self-label);
+  deterministic provider and any failure path -> `deterministic`.
+- `backend/intelligence/ai/guard.py`: validates `subject_component`
+  matches the context; trust boundary documented explicitly
+  ("Identifier grounding is validated automatically. Natural-language
+  interpretation may still contain unsupported wording, therefore AI prose
+  is non-authoritative and deterministic evidence remains the source of
+  truth.").
+- `backend/api/intelligence.py`: unchanged (serializes the new fields via
+  Pydantic).
+- Frontend: `api.ts` gains `InvolvedResource`, `ExplanationSource`,
+  `involved_resources`; `IntelligenceView.tsx` adds an "Involved DB2
+  Resources" section (table, read/write badge, used-by programs,
+  evidence), and the explanation badge/title now come from
+  `explanation_source` (DETERMINISTIC SUMMARY / AI EXPLANATION / fallback
+  note); `App.css` adds `prov-det`, `rel-badge.read/.write` styles.
+- Docs: `docs/ai-grounding.md` (source labeling, subject grounding, trust
+  boundary), `docs/risk-signal-model.md` (DB2_WRITE_INVOLVED from involved
+  resources), `docs/phase2-architecture.md` (context model wording).
+
+Verification (commands actually run):
+- `.venv/bin/python -m pytest backend/tests/ -q` -> 101 passed, 0 failed
+  (87 prior + 14 new: involved-resource, DB2 signal/checklist, explanation
+  source, guard subject, AI write-path, API bundle tests).
+- `.venv/bin/python analyze.py sample_mainframe`, `impact.py
+  copybook:WARRCOPY`, `impact.py copybook:UNUSED` -> Phase 1 behavior
+  unchanged.
+- Live API `/api/intelligence/copybook:WARRCOPY` -> 200: WARRCOPY not in
+  affected_tables; involved read/write WARRANTY + CLAIM_HISTORY write;
+  DB2_WRITE_INVOLVED fired; db2_write_involved checklist item present;
+  explanation_source == "deterministic".
+- Live API `/api/intelligence/copybook:UNUSED` -> 200: 0 impacts, 0
+  involved resources, no DB2 signal, no checklist items.
+- Live API `/api/intelligence/table:WARRANTY` -> 200: read WARRANTY,
+  write WARRANTY + CLAIM_HISTORY, READS_TABLE/WRITES_TABLE distinguished.
+- `npm run build` -> vite build, zero errors (pre-existing chunk-size
+  warning only).
+- `git diff phase1-complete -- backend/parsers backend/graph backend/models
+  analyze.py impact.py` -> empty (Phase 1 frozen).
+
+Not committed, not tagged. No Phase 2B/3 work.
+
+## 2026-09-26 — Phase 2A correction: changed-program involved-resource regression tests
+
+Suspected bug: involved resources missing for the changed component itself
+when the changed component is a COBOL program (program resource scope not
+including the changed component's own outgoing edges).
+Verification result: NO BUG — `build_impact_context` already derives involved
+READS_TABLE/WRITES_TABLE resources from `affected_programs` + the changed
+component when `changed_component_type == COBOL_PROGRAM`, and the changed
+program is not added to its own impacted-components set. Confirmed live for
+program:WARR001 before any change.
+Change made (Phase 2 only, no Phase 1 touch): 5 new regression tests in
+backend/tests/test_phase2_intelligence.py proving for change program:WARR001:
+not in its own impacted set; WARRANTY read resource (cobol/WARR001.cbl:27,
+"FROM WARRANTY") and write resource (:31, "INSERT INTO WARRANTY") with
+real Phase 1 file/line/text evidence; DB2_WRITE_INVOLVED fires (high,
+triggered_by program:WARR001); db2_read_involved + db2_write_involved
+checklist items fire.
+- pytest: 106 passed, 0 failed (101 prior + 5 new).
+- analyze.py sample_mainframe: 30 dependencies; impact.py WARRCOPY/UNUSED
+  outputs unchanged.
+- Live API program:WARR001 -> 200: direct DAILY01/WARRANTY-proc, transitive
+  WARRBTCH, affected_programs [], involved WARRANTY read+write, DB2_WRITE_INVOLVED
+  high, checklist db2_read_involved/db2_write_involved/jobs_impacted/
+  procs_affected/transitive_impact, explanation_source deterministic.
+- WARRCOPY/UNUSED/WARRANTY live scenarios unchanged.
+- npm run build -> vite build, zero errors (pre-existing chunk-size warning).
+- git diff phase1-complete -- backend/parsers backend/graph backend/models
+  analyze.py impact.py -> empty (Phase 1 frozen).
+
+Not committed, not tagged. No Phase 2B/3 work.

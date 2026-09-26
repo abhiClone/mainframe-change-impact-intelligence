@@ -88,6 +88,123 @@ export class ApiError extends Error {
   }
 }
 
+/* ------------------------------------------------------------------ */
+/* Phase 2A — Release Intelligence (deterministic impact context +      */
+/* optional grounded AI explanation). All numbers, tests, signals,     */
+/* checklist items and explanation text come from the API; the client  */
+/* invents nothing.                                                    */
+/* ------------------------------------------------------------------ */
+
+export interface IntelligencePathStep {
+  source: string; // the dependent: source DEPENDS ON target
+  target: string; // the thing depended on
+  relationship: string;
+  evidence: Evidence;
+}
+
+export interface IntelligencePath {
+  impacted: string;
+  path: IntelligencePathStep[];
+}
+
+export interface IntelligenceEdge {
+  source: string;
+  target: string;
+  relationship: string;
+  evidence: Evidence;
+}
+
+export interface InvolvedResource {
+  table: string;
+  access: "read" | "write"; // mirrors READS_TABLE / WRITES_TABLE
+  used_by: string[]; // impacted program ids holding this edge
+  evidence: Evidence[];
+}
+
+export interface IntelligenceImpact {
+  changed_component: string;
+  changed_component_type: ComponentType;
+  direct_impacts: string[];
+  transitive_impacts: string[];
+  dependency_paths: IntelligencePath[];
+  relationships: string[];
+  evidence: IntelligenceEdge[];
+  affected_programs: string[];
+  affected_copybooks: string[];
+  affected_jobs: string[];
+  affected_procs: string[];
+  affected_tables: string[];
+  // Involved (not impacted) DB2 resources: tables used by impacted programs
+  // via existing Phase 1 edges. A table here does NOT depend on the change.
+  read_tables: string[];
+  write_tables: string[];
+  involved_resources: InvolvedResource[];
+  maximum_impact_depth: number;
+  total_impacted_components: number;
+}
+
+export type TestImpactLevel = "MUST_RUN" | "SHOULD_RUN";
+
+export interface RecommendedTest {
+  test_id: string;
+  test_name: string;
+  test_type: string;
+  matched_components: string[];
+  impact_level: TestImpactLevel;
+  dependency_paths: IntelligencePath[];
+  rationale: string; // machine-generated from matched components + paths
+  evidence: Evidence[];
+}
+
+export type RiskSeverity = "low" | "medium" | "high";
+
+export interface RiskSignal {
+  id: string;
+  severity: RiskSeverity;
+  title: string;
+  explanation: string;
+  triggered_by: string[];
+  supporting_components: string[];
+  evidence: Evidence[];
+}
+
+export interface ReleaseChecklistItem {
+  id: string;
+  title: string;
+  detail: string;
+  rule: string; // deterministic rule that produced this item
+  related_components: string[];
+}
+
+export type ExplanationSource = "deterministic" | "ai";
+
+export interface AiExplanation {
+  subject_component: string;
+  explanation_source: ExplanationSource;
+  executive_summary: string;
+  technical_summary: string;
+  testing_summary: string;
+  release_considerations: string;
+}
+
+export interface IntelligenceResult {
+  changed_component: string;
+  impact: IntelligenceImpact;
+  recommended_tests: RecommendedTest[];
+  risk_signals: RiskSignal[];
+  release_checklist: ReleaseChecklistItem[];
+  ai_explanation: AiExplanation;
+}
+
+export interface TestCatalogEntry {
+  id: string;
+  name: string;
+  type: string;
+  covers: string[];
+  execution: Record<string, string>;
+  description: string;
+}
+
 async function get<T>(path: string): Promise<T> {
   let res: Response;
   try {
@@ -120,6 +237,9 @@ export const api = {
     get<ComponentDetail>(`/api/component/${encodeURIComponent(id)}`),
   impact: (id: string) =>
     get<ImpactResult>(`/api/impact/${encodeURIComponent(id)}`),
+  intelligence: (id: string) =>
+    get<IntelligenceResult>(`/api/intelligence/${encodeURIComponent(id)}`),
+  testCatalog: () => get<TestCatalogEntry[]>("/api/test-catalog"),
 };
 
 export { API_BASE };
