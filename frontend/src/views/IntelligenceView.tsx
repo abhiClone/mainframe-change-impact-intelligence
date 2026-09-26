@@ -503,7 +503,10 @@ export default function IntelligenceView() {
 
   const analyze = (id: string) => {
     const trimmed = id.trim();
-    if (!trimmed) return;
+    if (!trimmed) {
+      setError("Enter or select a component ID.");
+      return;
+    }
     setLoading(true);
     setError(null);
     api

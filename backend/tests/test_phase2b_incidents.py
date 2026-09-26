@@ -169,6 +169,27 @@ def test_invalid_severity_rejected(valid_ids, tmp_path):
         load_incidents(path=path, valid_component_ids=valid_ids)
 
 
+def test_malformed_yaml_raises_curated_error(valid_ids, tmp_path):
+    # A corrupt dataset must produce the curated IncidentDatasetError,
+    # never leak a raw yaml.parser.ParserError.
+    import yaml
+
+    path = tmp_path / "incidents.yaml"
+    path.write_text("incidents: [unclosed\n")
+    with pytest.raises(IncidentDatasetError) as exc_info:
+        load_incidents(path=path, valid_component_ids=valid_ids)
+    assert not isinstance(exc_info.value, yaml.YAMLError)
+    assert "not valid YAML" in str(exc_info.value)
+
+
+def test_non_mapping_yaml_raises_curated_error(valid_ids, tmp_path):
+    path = tmp_path / "incidents.yaml"
+    path.write_text("- just\n- a\n- list\n")
+    with pytest.raises(IncidentDatasetError) as exc_info:
+        load_incidents(path=path, valid_component_ids=valid_ids)
+    assert "incidents" in str(exc_info.value)
+
+
 # ------------------------------------------------------------------
 # Relevance engine: WARRCOPY scenario
 # ------------------------------------------------------------------

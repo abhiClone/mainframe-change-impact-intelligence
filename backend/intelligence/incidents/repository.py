@@ -72,8 +72,15 @@ class YamlFileIncidentRepository(IncidentRepository):
             raise IncidentDatasetError(
                 f"incident dataset not found: {self._path}"
             )
-        with open(self._path, "r", encoding="utf-8") as fh:
-            data = yaml.safe_load(fh)
+        try:
+            with open(self._path, "r", encoding="utf-8") as fh:
+                data = yaml.safe_load(fh)
+        except yaml.YAMLError as exc:
+            # A corrupt dataset must fail with the curated domain error,
+            # never leak a raw parser exception through the API.
+            raise IncidentDatasetError(
+                f"incident dataset is not valid YAML ({self._path}): {exc}"
+            ) from exc
         if not isinstance(data, dict) or "incidents" not in data:
             raise IncidentDatasetError(
                 f"incident dataset must be a mapping with an 'incidents' list: {self._path}"

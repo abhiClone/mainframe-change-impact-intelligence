@@ -171,18 +171,18 @@ incidents:
       Added the effective-date predicate and a regression test.
 
   - id: INC-1055
-    title: DAILY01 wrote duplicate CLAIM_HISTORY rows
+    title: WARRBTCH wrote duplicate CLAIM_HISTORY rows
     occurred_at: 2026-04-02
     severity: medium
     status: resolved
     summary: >
-      A rerun of DAILY01 re-inserted claim-history rows that already existed
+      A rerun of WARRBTCH re-inserted claim-history rows that already existed
       in CLAIM_HISTORY.
     symptoms:
       - SQLCODE -803
       - duplicate rows after job rerun
     linked_components:
-      - job:DAILY01
+      - job:WARRBTCH
       - table:CLAIM_HISTORY
     failure_mode: duplicate_database_record
     root_cause_category: operations

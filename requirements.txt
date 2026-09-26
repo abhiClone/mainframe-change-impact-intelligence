@@ -1,6 +1,18 @@
-fastapi
-uvicorn
-pydantic
-networkx
-pytest
-pyyaml
+# Python dependencies for the Mainframe Change Impact & Release Intelligence Platform.
+#
+# Compatible version constraints (lower bound = the stack verified by the
+# frozen baselines; upper bound = next major, which is expected to be
+# incompatible). Transitive dependencies are intentionally left to pip's
+# resolver rather than frozen manually.
+#
+# Verified working stack (Python 3.12):
+#   fastapi 0.141.1, uvicorn 0.54.0, pydantic 2.13.5,
+#   networkx 3.7, pytest 9.1.1, PyYAML 6.0.3, httpx 0.28.x
+
+fastapi>=0.141,<1
+uvicorn>=0.54,<1
+pydantic>=2.13,<3
+networkx>=3.7,<4
+pytest>=9.1,<10
+pyyaml>=6.0,<7
+httpx>=0.28,<1
