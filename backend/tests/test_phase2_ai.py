@@ -215,6 +215,9 @@ def test_hallucinated_component_rejected():
         technical_summary="All good otherwise.",
         testing_summary="Run TC-WARR-001.",
         release_considerations="None.",
+        incident_summary="None.",
+        historical_patterns="None.",
+        release_history_considerations="None.",
     )
     with pytest.raises(HallucinationError) as exc_info:
         validate_explanation(explanation, context)
@@ -230,6 +233,9 @@ def test_hallucinated_test_id_rejected():
         technical_summary="Impacts program:WARR001.",
         testing_summary="Run TC-FAKE-999 for extra safety.",
         release_considerations="None.",
+        incident_summary="None.",
+        historical_patterns="None.",
+        release_history_considerations="None.",
     )
     with pytest.raises(HallucinationError) as exc_info:
         validate_explanation(explanation, context)
@@ -248,6 +254,9 @@ def test_real_ids_from_context_pass_validation():
         technical_summary="copybook:WARRCOPY is used by program:WARR001.",
         testing_summary="Run TC-WARR-001 against the impacted programs.",
         release_considerations="See RSK-001 and CHK-001.",
+        incident_summary="None.",
+        historical_patterns="None.",
+        release_history_considerations="None.",
     )
     assert validate_explanation(explanation, context) is explanation
 
@@ -275,6 +284,9 @@ class _HallucinatingProvider(IntelligenceProvider):
             technical_summary="Bogus.",
             testing_summary="Bogus.",
             release_considerations="Bogus.",
+            incident_summary="None.",
+            historical_patterns="None.",
+            release_history_considerations="None.",
         )
 
 
@@ -384,6 +396,9 @@ def test_subject_component_mismatch_rejected():
         technical_summary="Impacts program:WARR001.",
         testing_summary="Run TC-WARR-001.",
         release_considerations="None.",
+        incident_summary="None.",
+        historical_patterns="None.",
+        release_history_considerations="None.",
     )
     with pytest.raises(HallucinationError) as exc_info:
         validate_explanation(explanation, context)
@@ -404,6 +419,9 @@ def test_service_rejects_wrong_subject_and_falls_back():
                 technical_summary="Fine.",
                 testing_summary="Fine.",
                 release_considerations="Fine.",
+                incident_summary="None.",
+                historical_patterns="None.",
+                release_history_considerations="None.",
             )
 
     explanation = explain_change(

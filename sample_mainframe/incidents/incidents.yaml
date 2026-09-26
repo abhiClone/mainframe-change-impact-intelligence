@@ -1,0 +1,374 @@
+# Synthetic historical production incidents for sample_mainframe.
+#
+# These are STRUCTURED synthetic historical evidence — not derived from
+# prose by any LLM. `linked_components` MUST be real Phase 1 component IDs;
+# the loader validates every entry against the Phase 1 component graph and
+# rejects the whole dataset if an unknown ID is present.
+#
+# Coverage (see docs/incident-model.md):
+# - copybook incident:        INC-1015
+# - program logic:            INC-1031
+# - batch failures:           INC-1088, INC-1045
+# - PROC incident:            INC-1023
+# - DB2 duplicate-key:        INC-1042, INC-1055
+# - DB2 data-integrity:       INC-1037, INC-1060
+# - read-related DB:          INC-1050
+# - multi-component:          INC-1042, INC-1037, INC-1050, INC-1055, INC-1095
+# - unrelated incidents:      INC-1065, INC-1070, INC-1075, INC-1080, INC-1085, INC-1090
+# - unrelated HIGH severity:  INC-1075  (severity alone must not imply relevance)
+#
+# Deliberately NO incident is linked to copybook:UNUSED: it stays a clean
+# negative-control scenario for the relevance engine.
+
+incidents:
+  - id: INC-1015
+    title: WARRCOPY layout change broke WARR002 compile
+    occurred_at: 2025-11-19
+    severity: medium
+    status: resolved
+    summary: >
+      A field was added to the WARRCOPY copybook; WARR002 was promoted
+      without recompilation and failed with a record-layout mismatch.
+    symptoms:
+      - WARR002 compile warning on copybook mismatch
+      - batch step RC=12 after promotion
+    linked_components:
+      - copybook:WARRCOPY
+      - program:WARR002
+    failure_mode: interface_mismatch
+    root_cause_category: change_management
+    root_cause_summary: >
+      Copybook layout was extended but the dependent program was not
+      recompiled before promotion.
+    resolution_summary: >
+      Recompiled all programs using WARRCOPY and re-ran batch validation.
+
+  - id: INC-1023
+    title: WARRANTY PROC step failed — missing DD card
+    occurred_at: 2025-12-08
+    severity: medium
+    status: resolved
+    summary: >
+      The WARRANTY PROC was invoked without the required claim dataset DD
+      card and the batch step abended.
+    symptoms:
+      - JCL error IEF212I
+      - batch step RC=12
+    linked_components:
+      - proc:WARRANTY
+    failure_mode: batch_abend
+    root_cause_category: configuration
+    root_cause_summary: >
+      A PROC invocation omitted the claim dataset DD statement required by
+      the PROC definition.
+    resolution_summary: >
+      Corrected the calling JCL and added a pre-flight DD check to the
+      release checklist.
+
+  - id: INC-1031
+    title: WARR001 warranty amount miscalculated
+    occurred_at: 2026-01-14
+    severity: medium
+    status: resolved
+    summary: >
+      Warranty claim amounts computed by WARR001 were off by a factor of
+      100 after a PIC clause interpretation change.
+    symptoms:
+      - claim amounts 100x expected value
+      - finance reconciliation mismatch
+    linked_components:
+      - program:WARR001
+    failure_mode: incorrect_computation
+    root_cause_category: application_logic
+    root_cause_summary: >
+      Decimal scaling assumption in WARR001 did not match the copybook
+      field definition.
+    resolution_summary: >
+      Corrected the scaling factor and added a reconciliation test.
+
+  - id: INC-1037
+    title: CLAIM_HISTORY missing rows after WARR002 run
+    occurred_at: 2026-01-28
+    severity: high
+    status: resolved
+    summary: >
+      WARR002 completed normally but a subset of claim-history rows was
+      never written to CLAIM_HISTORY.
+    symptoms:
+      - row count mismatch in CLAIM_HISTORY
+      - no SQL error raised
+    linked_components:
+      - program:WARR002
+      - table:CLAIM_HISTORY
+    failure_mode: missing_database_rows
+    root_cause_category: application_logic
+    root_cause_summary: >
+      A conditional branch in WARR002 skipped the CLAIM_HISTORY insert for
+      claims below a threshold.
+    resolution_summary: >
+      Fixed the branch condition and backfilled the missing rows.
+
+  - id: INC-1042
+    title: Duplicate WARRANTY row created
+    occurred_at: 2026-02-11
+    severity: high
+    status: resolved
+    summary: >
+      Warranty processing attempted to insert a duplicate record into the
+      WARRANTY table.
+    symptoms:
+      - SQLCODE -803
+      - duplicate warranty processing
+    linked_components:
+      - program:WARR001
+      - table:WARRANTY
+    failure_mode: duplicate_database_record
+    root_cause_category: application_logic
+    root_cause_summary: >
+      Insert validation did not detect an existing warranty row.
+    resolution_summary: >
+      Corrected validation before the WARRANTY insert.
+
+  - id: INC-1045
+    title: WARRBTCH abended with S322 CPU timeout
+    occurred_at: 2026-02-20
+    severity: medium
+    status: resolved
+    summary: >
+      The WARRBTCH batch job exceeded its CPU limit while reprocessing a
+      large warranty backlog.
+    symptoms:
+      - S322 abend
+      - job restart required
+    linked_components:
+      - job:WARRBTCH
+    failure_mode: batch_timeout
+    root_cause_category: operations
+    root_cause_summary: >
+      Backlog volume exceeded the job's CPU allocation after a rerun.
+    resolution_summary: >
+      Split the backlog into chunks and raised the CPU limit.
+
+  - id: INC-1050
+    title: Stale warranty read returned expired coverage
+    occurred_at: 2026-03-10
+    severity: low
+    status: resolved
+    summary: >
+      WARR001 read a warranty row whose coverage had expired; the query did
+      not filter on the effective date.
+    symptoms:
+      - expired coverage presented as active
+      - customer complaint
+    linked_components:
+      - program:WARR001
+      - table:WARRANTY
+    failure_mode: stale_read
+    root_cause_category: application_logic
+    root_cause_summary: >
+      The WARRANTY select omitted the effective-date predicate.
+    resolution_summary: >
+      Added the effective-date predicate and a regression test.
+
+  - id: INC-1055
+    title: DAILY01 wrote duplicate CLAIM_HISTORY rows
+    occurred_at: 2026-04-02
+    severity: medium
+    status: resolved
+    summary: >
+      A rerun of DAILY01 re-inserted claim-history rows that already existed
+      in CLAIM_HISTORY.
+    symptoms:
+      - SQLCODE -803
+      - duplicate rows after job rerun
+    linked_components:
+      - job:DAILY01
+      - table:CLAIM_HISTORY
+    failure_mode: duplicate_database_record
+    root_cause_category: operations
+    root_cause_summary: >
+      The job was rerun without the idempotency guard that normally skips
+      already-processed claims.
+    resolution_summary: >
+      Made the rerun idempotent and documented the rerun procedure.
+
+  - id: INC-1060
+    title: WARRANTY check-constraint violation on insert
+    occurred_at: 2026-04-15
+    severity: high
+    status: resolved
+    summary: >
+      An insert into WARRANTY was rejected by a check constraint on the
+      claim amount.
+    symptoms:
+      - SQLCODE -545
+      - batch step RC=8
+    linked_components:
+      - table:WARRANTY
+    failure_mode: constraint_violation
+    root_cause_category: data_quality
+    root_cause_summary: >
+      Upstream data contained a negative claim amount that violated the
+      table check constraint.
+    resolution_summary: >
+      Added input validation before the insert.
+
+  - id: INC-1065
+    title: CUST001 customer extract failure
+    occurred_at: 2026-02-05
+    severity: medium
+    status: resolved
+    summary: >
+      The customer extract program CUST001 failed reading a malformed
+      customer record.
+    symptoms:
+      - file status 39 on customer file
+      - extract job RC=12
+    linked_components:
+      - program:CUST001
+    failure_mode: file_read_error
+    root_cause_category: data_quality
+    root_cause_summary: >
+      A malformed customer record had a record length mismatch.
+    resolution_summary: >
+      Quarantined the bad record and added a length check.
+
+  - id: INC-1070
+    title: NIGHT01 JCL syntax error
+    occurred_at: 2026-01-05
+    severity: low
+    status: resolved
+    summary: >
+      The NIGHT01 job failed JCL validation due to a continuation-column
+      error.
+    symptoms:
+      - IEFC001I JCL error
+      - job never started
+    linked_components:
+      - job:NIGHT01
+    failure_mode: jcl_error
+    root_cause_category: configuration
+    root_cause_summary: >
+      A JCL edit broke the continuation column on a DD statement.
+    resolution_summary: >
+      Corrected the JCL and re-ran validation.
+
+  - id: INC-1075
+    title: CUSTOMER table orphaned rows after purge
+    occurred_at: 2026-03-25
+    severity: high
+    status: resolved
+    summary: >
+      A purge of the CUSTOMER table left orphaned rows in dependent audit
+      tables.
+    symptoms:
+      - referential-integrity report flagged orphans
+      - audit queries returned stale rows
+    linked_components:
+      - table:CUSTOMER
+    failure_mode: data_integrity_violation
+    root_cause_category: operations
+    root_cause_summary: >
+      The purge job did not cascade to dependent audit tables.
+    resolution_summary: >
+      Cleaned up orphaned rows and fixed the purge cascade.
+
+  - id: INC-1080
+    title: VEH001 vehicle lookup returned wrong result
+    occurred_at: 2025-12-20
+    severity: medium
+    status: resolved
+    summary: >
+      VEH001 returned a vehicle record for the wrong key due to a missing
+      key segment in the lookup.
+    symptoms:
+      - wrong vehicle details on report
+      - manual correction required
+    linked_components:
+      - program:VEH001
+    failure_mode: incorrect_lookup
+    root_cause_category: application_logic
+    root_cause_summary: >
+      The lookup key omitted the vehicle-year segment.
+    resolution_summary: >
+      Fixed the key construction and added a lookup regression test.
+
+  - id: INC-1085
+    title: CUSTOMER PROC dataset contention
+    occurred_at: 2026-03-18
+    severity: medium
+    status: resolved
+    summary: >
+      The CUSTOMER PROC waited on an enqueue held by another job and missed
+      its batch window.
+    symptoms:
+      - enqueue wait timeout
+      - batch window missed
+    linked_components:
+      - proc:CUSTOMER
+    failure_mode: resource_contention
+    root_cause_category: operations
+    root_cause_summary: >
+      Two jobs were scheduled against the same dataset window.
+    resolution_summary: >
+      Rescheduled the conflicting job.
+
+  - id: INC-1088
+    title: DAILY01 failed after DB2 timeout
+    occurred_at: 2026-03-02
+    severity: high
+    status: resolved
+    summary: >
+      DAILY01 failed when a DB2 query exceeded the timeout during peak
+      batch hours.
+    symptoms:
+      - SQLCODE -905
+      - batch step RC=12
+    linked_components:
+      - job:DAILY01
+    failure_mode: database_timeout
+    root_cause_category: operations
+    root_cause_summary: >
+      Lock contention on the WARRANTY table during peak batch hours.
+    resolution_summary: >
+      Rescheduled the step outside peak hours and tuned the query.
+
+  - id: INC-1090
+    title: VEHCOPY copybook field truncation
+    occurred_at: 2026-04-22
+    severity: low
+    status: resolved
+    summary: >
+      A field added to VEHCOPY was truncated by programs compiled against
+      the old layout.
+    symptoms:
+      - truncated vehicle description
+      - display-only impact
+    linked_components:
+      - copybook:VEHCOPY
+    failure_mode: interface_mismatch
+    root_cause_category: change_management
+    root_cause_summary: >
+      Dependent programs were not recompiled after the copybook change.
+    resolution_summary: >
+      Recompiled dependents and verified output.
+
+  - id: INC-1095
+    title: WARR001 deadlock on WARRANTY insert
+    occurred_at: 2026-05-06
+    severity: high
+    status: resolved
+    summary: >
+      Two WARR001 instances deadlocked while inserting warranty rows.
+    symptoms:
+      - SQLCODE -911
+      - batch step RC=8
+    linked_components:
+      - program:WARR001
+      - table:WARRANTY
+    failure_mode: database_deadlock
+    root_cause_category: concurrency
+    root_cause_summary: >
+      Concurrent inserts locked index pages in opposite order.
+    resolution_summary: >
+      Serialized the insert step and added retry logic.

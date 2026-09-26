@@ -556,3 +556,124 @@ checklist items fire.
   analyze.py impact.py -> empty (Phase 1 frozen).
 
 Not committed, not tagged. No Phase 2B/3 work.
+
+## 2026-09-26 — Phase 2B: Historical Incident Intelligence
+
+Objective: answer "which historical production incidents are relevant to
+this change, and why?" with a fully deterministic relevance engine. LLMs
+never select incidents or invent incident-to-component associations.
+
+Files created:
+- sample_mainframe/incidents/incidents.yaml (17 synthetic incidents)
+- backend/intelligence/incidents/__init__.py
+- backend/intelligence/incidents/models.py (HistoricalIncident,
+  RelevanceReason(Type), RelevantIncident, IncidentIntelligence,
+  REASON_PRECEDENCE)
+- backend/intelligence/incidents/repository.py (IncidentRepository ABC,
+  YamlFileIncidentRepository with load-time validation,
+  IncidentDatasetError)
+- backend/intelligence/incidents/relevance.py (deterministic relevance
+  engine; reason templates; precedence-ordered reasons; deterministic
+  ordering: primary tier, occurred_at most-recent-first, id)
+- backend/intelligence/incidents/service.py (lazy validated loading,
+  incident_intelligence_for)
+- backend/tests/test_phase2b_incidents.py (40 tests)
+- docs/incident-model.md, docs/incident-relevance.md,
+  docs/phase2b-architecture.md
+
+Files modified:
+- backend/intelligence/ai/ai_models.py (IntelligenceContext.relevant_incidents;
+  IntelligenceExplanation gains incident_summary, historical_patterns,
+  release_history_considerations)
+- backend/intelligence/ai/providers.py (deterministic incident sections
+  from supplied incidents only; FakeProvider canned incident clause;
+  HttpLlmProvider instruction + response keys extended)
+- backend/intelligence/ai/guard.py (INC- id regex; incident ids validated;
+  all 7 text fields scanned)
+- backend/intelligence/ai/service.py (explain_change gains optional
+  incident_intelligence param; serializes only selected incidents)
+- backend/api/intelligence.py (additive "incident_intelligence" key in the
+  /api/intelligence bundle; new GET /api/incidents,
+  /api/incidents/{incident_id}, /api/incident-intelligence/{component_id};
+  unknown component -> 404, unknown incident -> 404, invalid dataset -> 500)
+- backend/tests/test_phase2_ai.py (test helpers updated for the 3 new
+  required explanation fields; no behavior change)
+- frontend/src/api.ts (HistoricalIncident / RelevantIncident /
+  IncidentIntelligence types; incidents/incident/incidentIntelligence
+  client calls)
+- frontend/src/views/IntelligenceView.tsx (HISTORICAL INCIDENT
+  INTELLIGENCE section: id/title/date, historical-severity badge vs
+  change-relevance badge, primary + all reasons, matched components,
+  why-relevant, deterministic paths, evidence, symptoms, root cause,
+  resolution; AI section extended with 3 incident blocks; relevant-incidents
+  stat card)
+- frontend/src/App.css (reason/relevance badges, incident detail styles)
+
+Tests added: 40 Phase 2B tests (dataset load/validation, all 5 reason
+types, precedence, multiple reasons, determinism, WARRCOPY/UNUSED/WARR001/
+WARRANTY scenarios, evidence attachment, unrelated high-severity
+exclusion, Phase 2A recommendation/signal invariance, AI incident-id
+guard accept/reject, meddling-provider immutability, provider-failure
+fallback, API incl. 404/500 paths).
+
+Commands executed:
+- .venv/bin/python -m pytest backend/tests/ -q -> 146 passed, 0 failed
+  (106 Phase 1+2A intact)
+- .venv/bin/python analyze.py sample_mainframe -> 18 components,
+  30 dependencies
+- .venv/bin/python impact.py copybook:WARRCOPY / copybook:UNUSED ->
+  unchanged Phase 1 output
+- live API checks: /api/incidents (17), /api/incidents/INC-1042,
+  /api/incident-intelligence/{WARRCOPY:11, UNUSED:0, WARR001:9,
+  WARRANTY:11}, /api/intelligence/copybook:WARRCOPY (incident_intelligence
+  present, Phase 2A sections unchanged), unknown component -> 404,
+  unknown incident -> 404
+- cd frontend && npm run build -> success, zero errors
+- grep frontend/src for hard-coded incident datasets -> none (API-driven)
+- git diff phase2a-complete -- backend/parsers backend/graph backend/models
+  analyze.py impact.py -> empty (Phase 1 frozen)
+
+Defects found: none in Phase 1 or Phase 2A logic. (4 pre-existing AI test
+helpers needed the 3 new required explanation fields after the additive
+schema extension; fixed in test helpers only.)
+
+Verification results: all acceptance criteria proven by executed commands
+above. Phase 2A deterministic outputs unchanged (test recommendations,
+risk signals, checklist, involved resources byte-identical).
+
+Not committed, not tagged. No work beyond Phase 2B.
+
+## 2026-09-26 — Phase 2B targeted semantic correction: READ/WRITE reason independence + summary semantics
+
+Defect found: in `backend/intelligence/incidents/relevance.py::_reasons_for`,
+the read-resource check was an `elif` after the write-resource check, so a
+table both read and written (e.g. table:WARRANTY for copybook:WARRCOPY)
+yielded only INVOLVED_WRITE_RESOURCE_MATCH — the valid READ reason was
+silently discarded, contradicting "all valid reasons remain inspectable".
+Also, `relevance_summary` counted primary tiers only under an ambiguous name.
+Fix (Phase 2B only):
+- `_reasons_for`: read and write resource matches are independent `if`
+  checks; both reasons preserved with their own deterministic evidence;
+  CHANGED-component subsumption and impact-beats-involved precedence kept.
+- `IncidentIntelligence`: `relevance_summary` replaced by
+  `primary_tier_counts` (sums to total) + `reason_counts` (all valid
+  reasons, may exceed total); API/UI labels disambiguated.
+- Frontend: api.ts type updated; IntelligenceView shows "primary tier: X"
+  stat cards plus an explicit all-reasons line.
+- Docs: docs/incident-relevance.md updated (read/write independence,
+  count-semantics section with WARRCOPY example).
+Tests: rewrote test_involved_read_resource_match_precedence (now asserts
+BOTH reasons, WRITE primary); updated INC-1042 multi-reason expectations;
+updated summary assertions; added 4 new tests (write-only CLAIM_HISTORY,
+read-only VEHICLE in CUST002 context, read/write evidence distinctness,
+primary-vs-all count semantics).
+- pytest: 150 passed, 0 failed (146 prior + 4 net new).
+- Live WARRCOPY: 11 incidents; INC-1060 (linked table:WARRANTY) now carries
+  INVOLVED_WRITE + INVOLVED_READ (primary WRITE); primary_tier_counts
+  changed 1/direct 5/transitive 4/involved-write 1/involved-read 0 (sums 11);
+  reason_counts involved-write 6/involved-read 4.
+- UNUSED: 0 relevant incidents.
+- Phase 1 and Phase 2A frozen behavior unchanged (diffs vs phase2a-complete
+  empty for Phase 1 paths and Phase 2A decision logic).
+
+Not committed, not tagged. Nothing beyond Phase 2B.

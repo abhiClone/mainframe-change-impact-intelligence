@@ -46,6 +46,61 @@ def _unique(seq: list[str]) -> list[str]:
     return out
 
 
+def _incident_sections(context: IntelligenceContext) -> tuple[str, str, str]:
+    """Build the three incident explanation sections from the supplied
+    relevant incidents only (no selection, no invention)."""
+    incidents = [
+        i for i in context.relevant_incidents if isinstance(i, dict)
+    ]
+    if not incidents:
+        return (
+            "No historical incidents are deterministically relevant to this change.",
+            "No historical failure patterns to report for this change.",
+            "No historical incident considerations for this release.",
+        )
+
+    def _label(i: dict) -> str:
+        return f"{i.get('id', '?')} — {i.get('title', '?')}"
+
+    incident_summary = (
+        f"{len(incidents)} historical incident{'s' if len(incidents) != 1 else ''} "
+        f"deterministically relevant to the change to {context.changed_component}: "
+        + "; ".join(
+            f"{_label(i)} [primary reason: {i.get('primary_reason', '?')}, "
+            f"historical severity: {i.get('severity', '?')}]"
+            for i in incidents
+        )
+        + "."
+    )
+
+    failure_modes = _unique(
+        [str(i.get("failure_mode", "?")) for i in incidents if i.get("failure_mode")]
+    )
+    root_causes = _unique(
+        [
+            str(i.get("root_cause_category", "?"))
+            for i in incidents
+            if i.get("root_cause_category")
+        ]
+    )
+    historical_patterns = (
+        f"Recurring failure modes in the supplied history: "
+        f"{', '.join(failure_modes) if failure_modes else 'none recorded'}. "
+        f"Root-cause categories observed: "
+        f"{', '.join(root_causes) if root_causes else 'none recorded'}."
+    )
+
+    release_history_considerations = (
+        "Based on the supplied history, the release team should be aware that: "
+        + " ".join(
+            f"{_label(i)} was previously resolved by: "
+            f"{i.get('resolution_summary', 'not recorded')}"
+            for i in incidents
+        )
+    )
+    return incident_summary, historical_patterns, release_history_considerations
+
+
 class DeterministicProvider(IntelligenceProvider):
     """Template-based explanation. No LLM, no network, always available.
 
@@ -128,6 +183,8 @@ class DeterministicProvider(IntelligenceProvider):
             + ("" if not checklist_lines else " Checklist: " + "; ".join(checklist_lines) + ".")
         )
 
+        incident_sections = _incident_sections(context)
+
         return IntelligenceExplanation(
             subject_component=context.changed_component,
             explanation_source=ExplanationSource.DETERMINISTIC,
@@ -135,6 +192,9 @@ class DeterministicProvider(IntelligenceProvider):
             technical_summary=technical_summary,
             testing_summary=testing_summary,
             release_considerations=release_considerations,
+            incident_summary=incident_sections[0],
+            historical_patterns=incident_sections[1],
+            release_history_considerations=incident_sections[2],
         )
 
 
@@ -160,6 +220,16 @@ class FakeProvider(IntelligenceProvider):
         if context.recommended_tests and isinstance(context.recommended_tests[0], dict):
             t = context.recommended_tests[0]
             test_clause = f" Run {t.get('test_id', '?')} ({t.get('test_name', '?')})."
+        incident_ids = [
+            str(i.get("id"))
+            for i in context.relevant_incidents
+            if isinstance(i, dict) and i.get("id")
+        ]
+        incident_clause = (
+            f" Relevant historical incidents: {', '.join(incident_ids)}."
+            if incident_ids
+            else " No relevant historical incidents supplied."
+        )
         return IntelligenceExplanation(
             subject_component=context.changed_component,
             explanation_source=ExplanationSource.AI,
@@ -176,6 +246,11 @@ class FakeProvider(IntelligenceProvider):
                 f"Canned release guidance: {len(context.risk_signals)} risk signal(s), "
                 f"{len(context.release_checklist)} checklist item(s)."
             ),
+            incident_summary=f"Canned incident summary.{incident_clause}",
+            historical_patterns="Canned historical patterns from supplied incidents.",
+            release_history_considerations=(
+                "Canned history considerations from supplied incidents."
+            ),
         )
 
 
@@ -190,9 +265,14 @@ class HttpLlmProvider(IntelligenceProvider):
     SYSTEM_INSTRUCTION = (
         "You are an assistant explaining a mainframe change-impact analysis. "
         "You may explain ONLY the supplied information. Do not introduce "
-        "components, dependencies, tests, tables, jobs or evidence not present "
-        "in the context. Respond with a JSON object with exactly these keys: "
-        "executive_summary, technical_summary, testing_summary, release_considerations."
+        "components, dependencies, tests, tables, jobs, incidents or evidence "
+        "not present in the context. You may summarize ONLY the relevant "
+        "incidents already supplied; you must not select additional incidents, "
+        "create incidents, modify relevance reasons, or change their order. "
+        "Respond with a JSON object with exactly these keys: "
+        "executive_summary, technical_summary, testing_summary, "
+        "release_considerations, incident_summary, historical_patterns, "
+        "release_history_considerations."
     )
 
     def __init__(self) -> None:

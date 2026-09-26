@@ -55,15 +55,30 @@ class IntelligenceContext(BaseModel):
         default_factory=list,
         description="Serialized ChecklistItem entries.",
     )
+    relevant_incidents: list[dict] = Field(
+        default_factory=list,
+        description=(
+            "Deterministically selected relevant incidents only "
+            "(serialized RelevantIncident summaries: id, title, severity, "
+            "occurred_at, primary_reason, relevance_reasons, "
+            "linked_components, failure_mode, root_cause_summary, "
+            "resolution_summary). The provider may summarize these; it may "
+            "not select, add, or invent incidents."
+        ),
+    )
 
 
 class IntelligenceExplanation(BaseModel):
-    """Four-section explanation produced by an explanation provider.
+    """Seven-section explanation produced by an explanation provider.
 
     ``subject_component`` echoes the changed component the explanation was
     asked about; the hallucination guard rejects any explanation whose
     subject does not match the supplied context. ``explanation_source``
     tells the UI/API consumer whether an LLM generated the text.
+
+    The three incident sections summarize ONLY the deterministically
+    selected relevant incidents supplied in the context; they are
+    explanation, never new selection.
     """
 
     subject_component: str = Field(
@@ -77,3 +92,15 @@ class IntelligenceExplanation(BaseModel):
     technical_summary: str = Field(..., description="Impact mechanics: paths, components, dependencies.")
     testing_summary: str = Field(..., description="What to test and why.")
     release_considerations: str = Field(..., description="Risks and checklist items for the release.")
+    incident_summary: str = Field(
+        ...,
+        description="Summary of the deterministically selected relevant historical incidents.",
+    )
+    historical_patterns: str = Field(
+        ...,
+        description="Recurring failure themes visible in the supplied incident history.",
+    )
+    release_history_considerations: str = Field(
+        ...,
+        description="What the release team should be aware of based on the supplied history.",
+    )

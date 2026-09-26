@@ -1,4 +1,4 @@
-"""Hallucination guard for the Phase 2A AI explanation layer.
+"""Hallucination guard for the Phase 2A/2B AI explanation layer.
 
 Validates that an IntelligenceExplanation references ONLY identifiers that
 appear in the supplied IntelligenceContext:
@@ -6,11 +6,12 @@ appear in the supplied IntelligenceContext:
 - component IDs: changed_component + impacted_components
 - test IDs: test_id values from recommended_tests
 - signal IDs: id values from risk_signals
+- incident IDs: id values from relevant_incidents (Phase 2B)
 
 Additionally the explanation must echo the context's ``changed_component``
 as ``subject_component``; a mismatch is rejected.
 
-Candidate identifiers are regex-extracted from the four explanation text
+Candidate identifiers are regex-extracted from the seven explanation text
 fields. Any candidate outside the allowed vocabulary raises
 HallucinationError. Identifiers already known to the context pass through
 untouched.
@@ -30,6 +31,7 @@ from .ai_models import IntelligenceContext, IntelligenceExplanation
 
 _COMPONENT_RE = re.compile(r"\b(?:program|job|proc|copybook|table):[A-Za-z0-9_#.\-]+\b")
 _TEST_ID_RE = re.compile(r"\bTC-[A-Za-z0-9\-]+\b")
+_INCIDENT_ID_RE = re.compile(r"\bINC-[A-Za-z0-9\-]+\b")
 
 
 class HallucinationError(ValueError):
@@ -62,6 +64,11 @@ def validate_explanation(
             signal_id = signal.get("id")
             if signal_id:
                 vocabulary.add(str(signal_id))
+    for incident in ctx.relevant_incidents:
+        if isinstance(incident, dict):
+            incident_id = incident.get("id")
+            if incident_id:
+                vocabulary.add(str(incident_id))
 
     # The explanation must be about the component it was asked about.
     if expl.subject_component != ctx.changed_component:
@@ -75,9 +82,13 @@ def validate_explanation(
         expl.technical_summary,
         expl.testing_summary,
         expl.release_considerations,
+        expl.incident_summary,
+        expl.historical_patterns,
+        expl.release_history_considerations,
     ):
         candidates.update(_COMPONENT_RE.findall(field))
         candidates.update(_TEST_ID_RE.findall(field))
+        candidates.update(_INCIDENT_ID_RE.findall(field))
 
     offending = sorted(candidate for candidate in candidates if candidate not in vocabulary)
     if offending:

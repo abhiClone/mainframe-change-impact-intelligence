@@ -2,10 +2,13 @@ import { useEffect, useState } from "react";
 import {
   api,
   type Evidence,
+  type IncidentIntelligence,
   type IntelligenceImpact,
   type IntelligenceResult,
   type IntelligencePath,
   type RecommendedTest,
+  type RelevantIncident,
+  type RelevanceReasonType,
   type ReleaseChecklistItem,
   type RiskSignal,
 } from "../api";
@@ -281,6 +284,9 @@ function AiExplanationSection({ ai }: { ai: IntelligenceResult["ai_explanation"]
     { label: "Technical summary", text: ai.technical_summary },
     { label: "Testing summary", text: ai.testing_summary },
     { label: "Release considerations", text: ai.release_considerations },
+    { label: "Incident summary", text: ai.incident_summary },
+    { label: "Historical patterns", text: ai.historical_patterns },
+    { label: "Release history considerations", text: ai.release_history_considerations },
   ];
   return (
     <section className="card intel-ai">
@@ -319,6 +325,160 @@ function AiExplanationSection({ ai }: { ai: IntelligenceResult["ai_explanation"]
       )}
       {!executive && summaries.every((s) => !s.text) && (
         <p className="muted">No explanation available.</p>
+      )}
+    </section>
+  );
+}
+
+function ReasonLabel({ reason }: { reason: RelevanceReasonType }) {
+  return (
+    <span className="prov-badge prov-reason">
+      {reason.replace(/_/g, " ")}
+    </span>
+  );
+}
+
+function SeverityBadge({ severity }: { severity: string }) {
+  return (
+    <span className={`severity-badge sev-${severity}`}>
+      historical severity: {severity}
+    </span>
+  );
+}
+
+function IncidentCard({
+  item,
+  onShowEvidence,
+}: {
+  item: RelevantIncident;
+  onShowEvidence: (e: EvidenceEdgeInfo) => void;
+}) {
+  const inc = item.incident;
+  return (
+    <li className="intel-item">
+      <div className="intel-item-head">
+        <strong>
+          <code>{inc.id}</code> — {inc.title}
+        </strong>
+      </div>
+      <div className="muted small">
+        {inc.occurred_at} · {inc.status} · failure mode: {inc.failure_mode}
+      </div>
+      <div className="badge-row">
+        <SeverityBadge severity={inc.severity} />
+        <span className="prov-badge prov-relevance">
+          change relevance: {item.primary_reason.replace(/_/g, " ")}
+        </span>
+      </div>
+      <p className="muted small intel-hint">
+        Historical severity describes the past incident, not the risk of the
+        current change. Relevance is decided deterministically from impact
+        data — a critical historical incident with no deterministic link is
+        never selected.
+      </p>
+      {item.relevance_reasons.map((r, i) => (
+        <div key={i} className="reason-block">
+          <div>
+            <ReasonLabel reason={r.reason} />{" "}
+            <span className="muted small">
+              matched: <code>{r.matched_component}</code>
+            </span>
+          </div>
+          <p className="small reason-expl">{r.explanation}</p>
+          {r.supporting_paths.length > 0 && (
+            <div className="muted small">Deterministic path(s):</div>
+          )}
+          {r.supporting_paths.map((p, j) => (
+            <PathChain key={j} path={p} onShowEvidence={onShowEvidence} />
+          ))}
+          {r.evidence.length > 0 && (
+            <div className="muted small">
+              Evidence:{" "}
+              {r.evidence.map((e, k) => (
+                <span key={k}>
+                  <EvidenceRef evidence={e} />
+                  {k < r.evidence.length - 1 ? " " : ""}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+      <div className="incident-detail">
+        <div className="muted small">
+          <strong>Symptoms:</strong> {inc.symptoms.join("; ") || "—"}
+        </div>
+        <div className="muted small">
+          <strong>Root cause:</strong> {inc.root_cause_summary || "—"}
+        </div>
+        <div className="muted small">
+          <strong>Resolution:</strong> {inc.resolution_summary || "—"}
+        </div>
+      </div>
+    </li>
+  );
+}
+
+function IncidentIntelligenceSection({
+  intel,
+  onShowEvidence,
+}: {
+  intel: IncidentIntelligence;
+  onShowEvidence: (e: EvidenceEdgeInfo) => void;
+}) {
+  const primary = intel.primary_tier_counts;
+  const allReasons = intel.reason_counts;
+  const tierLabels: Record<string, string> = {
+    CHANGED_COMPONENT_MATCH: "changed-component",
+    DIRECT_IMPACT_MATCH: "direct-impact",
+    TRANSITIVE_IMPACT_MATCH: "transitive-impact",
+    INVOLVED_WRITE_RESOURCE_MATCH: "involved-write",
+    INVOLVED_READ_RESOURCE_MATCH: "involved-read",
+  };
+  return (
+    <section className="card">
+      <SectionHeader
+        title="Historical Incident Intelligence"
+        hint="Deterministic historical correlation: incidents whose structured component links intersect the change, its impact set, or its involved DB2 resources. Selection is deterministic — no LLM decides which incidents are relevant."
+      />
+      {intel.total_relevant_incidents === 0 ? (
+        <p className="muted">
+          No historical incidents are deterministically relevant to this
+          change.
+        </p>
+      ) : (
+        <>
+          <div className="stat-grid">
+            <div className="stat-card">
+              <div className="stat-number">
+                {intel.total_relevant_incidents}
+              </div>
+              <div className="stat-label">relevant incidents</div>
+            </div>
+            {Object.entries(tierLabels).map(([key, label]) => (
+              <div className="stat-card" key={key}>
+                <div className="stat-number">{primary[key] ?? 0}</div>
+                <div className="stat-label">primary tier: {label}</div>
+              </div>
+            ))}
+          </div>
+          <p className="muted">
+            Primary-tier counts sum to the incident total. All-reason counts
+            (one incident may carry several valid reasons):{" "}
+            {Object.entries(tierLabels)
+              .map(([key, label]) => `${label}: ${allReasons[key] ?? 0}`)
+              .join(" · ")}
+          </p>
+          <ul className="intel-list">
+            {intel.relevant_incidents.map((r) => (
+              <IncidentCard
+                key={r.incident.id}
+                item={r}
+                onShowEvidence={onShowEvidence}
+              />
+            ))}
+          </ul>
+        </>
       )}
     </section>
   );
@@ -456,6 +616,12 @@ export default function IntelligenceView() {
                 </div>
                 <div className="stat-label">checklist items</div>
               </div>
+              <div className="stat-card">
+                <div className="stat-number">
+                  {result.incident_intelligence.total_relevant_incidents}
+                </div>
+                <div className="stat-label">relevant incidents</div>
+              </div>
             </div>
             {result.impact.total_impacted_components === 0 && (
               <p className="muted">
@@ -554,6 +720,11 @@ export default function IntelligenceView() {
               </ul>
             )}
           </section>
+
+          <IncidentIntelligenceSection
+            intel={result.incident_intelligence}
+            onShowEvidence={setEvidenceEdge}
+          />
 
           <AiExplanationSection ai={result.ai_explanation} />
 

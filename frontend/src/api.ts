@@ -185,6 +185,60 @@ export interface AiExplanation {
   technical_summary: string;
   testing_summary: string;
   release_considerations: string;
+  // Phase 2B: incident sections — summarize ONLY deterministically
+  // selected relevant incidents; never new selection.
+  incident_summary: string;
+  historical_patterns: string;
+  release_history_considerations: string;
+}
+
+export interface HistoricalIncident {
+  id: string;
+  title: string;
+  occurred_at: string;
+  severity: "low" | "medium" | "high" | "critical";
+  status: "open" | "investigating" | "resolved";
+  summary: string;
+  symptoms: string[];
+  linked_components: string[];
+  failure_mode: string;
+  root_cause_category: string;
+  root_cause_summary: string;
+  resolution_summary: string;
+}
+
+export type RelevanceReasonType =
+  | "CHANGED_COMPONENT_MATCH"
+  | "DIRECT_IMPACT_MATCH"
+  | "TRANSITIVE_IMPACT_MATCH"
+  | "INVOLVED_WRITE_RESOURCE_MATCH"
+  | "INVOLVED_READ_RESOURCE_MATCH";
+
+export interface RelevanceReason {
+  reason: RelevanceReasonType;
+  matched_component: string;
+  explanation: string; // deterministic template prose
+  supporting_paths: IntelligencePath[];
+  evidence: Evidence[];
+}
+
+export interface RelevantIncident {
+  incident: HistoricalIncident;
+  primary_reason: RelevanceReasonType;
+  relevance_reasons: RelevanceReason[]; // all reasons, precedence order
+  matched_components: string[];
+  supporting_resources: InvolvedResource[];
+}
+
+export interface IncidentIntelligence {
+  changed_component: string;
+  relevant_incidents: RelevantIncident[];
+  total_relevant_incidents: number;
+  // Incidents counted by PRIMARY relevance tier; sums to the total.
+  primary_tier_counts: Record<string, number>;
+  // Every valid relevance reason counted; may exceed the total because
+  // one incident can carry several reasons.
+  reason_counts: Record<string, number>;
 }
 
 export interface IntelligenceResult {
@@ -193,6 +247,7 @@ export interface IntelligenceResult {
   recommended_tests: RecommendedTest[];
   risk_signals: RiskSignal[];
   release_checklist: ReleaseChecklistItem[];
+  incident_intelligence: IncidentIntelligence; // Phase 2B additive layer
   ai_explanation: AiExplanation;
 }
 
@@ -240,6 +295,13 @@ export const api = {
   intelligence: (id: string) =>
     get<IntelligenceResult>(`/api/intelligence/${encodeURIComponent(id)}`),
   testCatalog: () => get<TestCatalogEntry[]>("/api/test-catalog"),
+  incidents: () => get<HistoricalIncident[]>("/api/incidents"),
+  incident: (id: string) =>
+    get<HistoricalIncident>(`/api/incidents/${encodeURIComponent(id)}`),
+  incidentIntelligence: (id: string) =>
+    get<IncidentIntelligence>(
+      `/api/incident-intelligence/${encodeURIComponent(id)}`
+    ),
 };
 
 export { API_BASE };

@@ -515,3 +515,43 @@ code.hl {
   gap: 0.5rem;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
+
+/* ---------- Phase 2B: historical incident intelligence ---------- */
+
+.badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 0.4rem 0;
+}
+
+.prov-reason {
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
+.prov-relevance {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.sev-critical { background: #fecaca; color: #991b1b; }
+
+.reason-block {
+  margin: 0.6rem 0;
+  padding: 0.5rem 0.7rem;
+  border-left: 3px solid #c7d2fe;
+  background: #f8fafc;
+  border-radius: 0 6px 6px 0;
+}
+
+.reason-expl {
+  margin: 0.3rem 0 0.4rem 0;
+}
+
+.incident-detail {
+  margin-top: 0.5rem;
+  display: grid;
+  gap: 0.25rem;
+}

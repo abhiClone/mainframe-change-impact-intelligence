@@ -9,6 +9,13 @@ dependency logic):
   GET /api/risk-signals/{component_id}        -> list[RiskSignal]
   GET /api/test-catalog                       -> list[TestCase]
 
+Phase 2B adds Historical Incident Intelligence (additive layer; the
+Phase 2A deterministic sections are unchanged):
+
+  GET /api/incidents                          -> list[HistoricalIncident]
+  GET /api/incidents/{incident_id}            -> one incident (404 if unknown)
+  GET /api/incident-intelligence/{component_id} -> IncidentIntelligence
+
 The AI explanation layer is optional and grounded: explain_change() falls
 back to the deterministic explanation when no provider is configured or
 the hallucination guard rejects output.
@@ -22,6 +29,16 @@ from fastapi import APIRouter, HTTPException
 
 from backend.intelligence.ai.service import explain_change
 from backend.intelligence.impact_context import build_impact_context
+from backend.intelligence.incidents.models import (
+    HistoricalIncident,
+    IncidentIntelligence,
+)
+from backend.intelligence.incidents.repository import IncidentDatasetError
+from backend.intelligence.incidents.service import (
+    get_incident,
+    get_incidents,
+    incident_intelligence_for,
+)
 from backend.intelligence.models import (
     ImpactContext,
     RecommendedTest,
@@ -46,9 +63,17 @@ def _require(component_id: str) -> None:
                             detail=f"unknown component: {component_id}")
 
 
+def _incident_intelligence_or_500(component_id: str) -> IncidentIntelligence:
+    try:
+        return incident_intelligence_for(component_id)
+    except IncidentDatasetError as exc:
+        # Invalid historical data must fail clearly, never silently.
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 @router.get("/api/intelligence/{component_id}",
             response_model=dict,
-            summary="Full Phase 2A intelligence bundle for a component")
+            summary="Full Phase 2A+2B intelligence bundle for a component")
 def get_intelligence(component_id: str) -> dict:
     _require(component_id)
     ctx = build_impact_context(component_id)
@@ -56,13 +81,18 @@ def get_intelligence(component_id: str) -> dict:
     recommendations = recommend_tests(ctx, catalog)
     signals = detect_risk_signals(ctx)
     checklist = build_checklist(ctx, signals)
-    explanation = explain_change(ctx, recommendations, signals, checklist)
+    incident_intelligence = _incident_intelligence_or_500(component_id)
+    explanation = explain_change(
+        ctx, recommendations, signals, checklist,
+        incident_intelligence=incident_intelligence,
+    )
     return {
         "changed_component": component_id,
         "impact": ctx.model_dump(),
         "recommended_tests": [t.model_dump() for t in recommendations],
         "risk_signals": [s.model_dump() for s in signals],
         "release_checklist": [c.model_dump() for c in checklist],
+        "incident_intelligence": incident_intelligence.model_dump(),
         "ai_explanation": explanation.model_dump(),
     }
 
@@ -90,3 +120,39 @@ def get_risk_signals(component_id: str) -> list[RiskSignal]:
             summary="Full test catalog (12 deterministic test cases)")
 def get_test_catalog() -> list[TestCase]:
     return load_catalog()
+
+
+# ------------------------------------------------------------------
+# Phase 2B: Historical Incident Intelligence
+# ------------------------------------------------------------------
+
+@router.get("/api/incidents",
+            response_model=list[HistoricalIncident],
+            summary="All validated historical incidents")
+def list_incidents() -> list[HistoricalIncident]:
+    try:
+        return get_incidents()
+    except IncidentDatasetError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.get("/api/incidents/{incident_id}",
+            response_model=HistoricalIncident,
+            summary="One historical incident by id (404 if unknown)")
+def get_incident_by_id(incident_id: str) -> HistoricalIncident:
+    try:
+        incident = get_incident(incident_id)
+    except IncidentDatasetError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    if incident is None:
+        raise HTTPException(status_code=404,
+                            detail=f"unknown incident: {incident_id}")
+    return incident
+
+
+@router.get("/api/incident-intelligence/{component_id}",
+            response_model=IncidentIntelligence,
+            summary="Deterministic historical-incident intelligence for a component")
+def get_incident_intelligence(component_id: str) -> IncidentIntelligence:
+    _require(component_id)
+    return _incident_intelligence_or_500(component_id)
