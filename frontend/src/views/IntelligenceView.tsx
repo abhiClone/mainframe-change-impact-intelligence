@@ -533,8 +533,8 @@ export default function IntelligenceView() {
       <p className="muted">
         Enter a component id to get its full release-intelligence report:
         impact summary, recommended tests, release-risk signals, release
-        checklist, and an AI-generated explanation grounded in the verified
-        data.
+        checklist, and a grounded explanation of the verified impact and
+        release data.
       </p>
 
       <form
@@ -570,7 +570,7 @@ export default function IntelligenceView() {
           <section className="card">
             <SectionHeader
               title="Change Summary"
-              hint="Deterministic impact context from the Phase 1 dependency graph."
+              hint="Deterministic impact context from the dependency graph."
             />
             <h3>
               <code>{result.impact.changed_component}</code>{" "}

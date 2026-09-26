@@ -259,3 +259,16 @@ describe("empty input", () => {
     expect(intelligence).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("release intelligence intro", () => {
+  it("uses provider-neutral intro copy and never promises AI", async () => {
+    intelligence.mockResolvedValue(makeResult());
+    render(<IntelligenceView />);
+    await waitFor(() =>
+      expect(
+        screen.getByText(/grounded explanation of the verified impact/)
+      ).toBeInTheDocument()
+    );
+    expect(screen.queryByText(/AI-generated explanation/)).not.toBeInTheDocument();
+  });
+});

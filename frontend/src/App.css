@@ -415,8 +415,10 @@ code.hl {
   font-size: 0.95rem;
 }
 
-.ev-ref { cursor: help; }
-.ev-gap { margin-right: 0.35rem; }
+.ev-ref { cursor: help; overflow-wrap: anywhere; }
+/* Evidence chips wrap as whole units so long file:line lists never
+   force page-level horizontal scrolling on narrow viewports. */
+.ev-gap { display: inline-block; margin: 0 0.35rem 0.25rem 0; }
 
 .priority-badge {
   display: inline-block;
@@ -472,6 +474,34 @@ code.hl {
   font-size: 0.9rem;
 }
 
+.hint-toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 700;
+  color: inherit;
+  cursor: pointer;
+}
+
+.hint-toggle:hover { text-decoration: underline; }
+
+.graph-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.6rem;
+}
+
+.graph-toolbar .legend { margin-bottom: 0; }
+
+.graph-controls {
+  display: flex;
+  gap: 0.5rem;
+}
+
 .legend {
   display: flex;
   flex-wrap: wrap;
@@ -507,13 +537,14 @@ code.hl {
   top: 10px;
   right: 10px;
   background: #fff;
-  border: 1px solid var(--border);
+  border: 1.5px solid #0ea5e9;
   border-radius: 6px;
   padding: 0.4rem 0.5rem;
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  font-weight: 600;
+  box-shadow: 0 2px 12px rgba(14, 165, 233, 0.28);
 }
 
 /* ---------- Phase 2B: historical incident intelligence ---------- */

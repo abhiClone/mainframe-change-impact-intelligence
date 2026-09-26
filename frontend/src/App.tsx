@@ -25,8 +25,7 @@ export default function App() {
       <header className="app-header">
         <h1>Mainframe Change Impact &amp; Release Intelligence</h1>
         <p className="subtitle">
-          Phase 1 — deterministic COBOL / JCL / DB2 dependency &amp;
-          change-impact engine
+          Deterministic Mainframe Change Impact &amp; Release Intelligence
         </p>
       </header>
 

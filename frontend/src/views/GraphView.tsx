@@ -22,13 +22,34 @@ const TYPE_LABEL: Record<ComponentType, string> = {
   DB2_TABLE: "DB2 table",
 };
 
+/** Perpendicular spread between parallel-edge curve apexes (px). */
+const PARALLEL_SPREAD = 60;
+
+/**
+ * Perpendicular offset for an edge's curve midpoint, so that multiple
+ * independent relationships between the same node pair render as
+ * distinguishable curves instead of overlapping. Single edges stay
+ * straight (offset 0). The edges remain independent elements with
+ * their own evidence — this only affects rendering.
+ */
+function parallelOffset(ele: cytoscape.EdgeSingular): number {
+  const total = ele.data("parallelTotal") as number;
+  if (!total || total <= 1) return 0;
+  const index = ele.data("parallelIndex") as number;
+  return (index - (total - 1) / 2) * PARALLEL_SPREAD;
+}
+
 export default function GraphView() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const cyRef = useRef<cytoscape.Core | null>(null);
+  const initialViewRef = useRef<{ zoom: number; pan: cytoscape.Position } | null>(
+    null
+  );
   const [graph, setGraph] = useState<GraphData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [evidenceEdge, setEvidenceEdge] = useState<EvidenceEdgeInfo | null>(null);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
+  const [hintOpen, setHintOpen] = useState(true);
 
   useEffect(() => {
     api
@@ -39,6 +60,26 @@ export default function GraphView() {
 
   useEffect(() => {
     if (!graph || !containerRef.current || cyRef.current) return;
+
+    // Group edges by directed node pair so parallel relationships
+    // (e.g. READS_TABLE + WRITES_TABLE between the same nodes) each
+    // get their own curve offset. Semantics are unchanged: every
+    // backend edge still becomes exactly one Cytoscape edge.
+    const pairMembers = new Map<string, number[]>();
+    graph.edges.forEach((e, i) => {
+      const key = `${e.source}\u2192${e.target}`;
+      const members = pairMembers.get(key);
+      if (members) members.push(i);
+      else pairMembers.set(key, [i]);
+    });
+    const parallelIndex = new Array<number>(graph.edges.length).fill(0);
+    const parallelTotal = new Array<number>(graph.edges.length).fill(1);
+    pairMembers.forEach((members) => {
+      members.forEach((edgePos, pos) => {
+        parallelIndex[edgePos] = pos;
+        parallelTotal[edgePos] = members.length;
+      });
+    });
 
     const cy = cytoscape({
       container: containerRef.current,
@@ -55,6 +96,8 @@ export default function GraphView() {
             file: e.evidence.file,
             line: e.evidence.line,
             text: e.evidence.text,
+            parallelIndex: parallelIndex[i],
+            parallelTotal: parallelTotal[i],
           },
         })),
       },
@@ -86,14 +129,17 @@ export default function GraphView() {
         {
           selector: "edge",
           style: {
-            width: 2,
+            width: 3,
             "line-color": "#94a3b8",
             "target-arrow-color": "#94a3b8",
             "target-arrow-shape": "triangle",
-            "curve-style": "bezier",
+            "curve-style": "unbundled-bezier",
+            "control-point-distances": parallelOffset,
+            "control-point-weights": 0.5,
             label: "data(relationship)",
-            "font-size": "8px",
-            color: "#475569",
+            "font-size": "9px",
+            "font-weight": 600,
+            color: "#334155",
             "text-background-color": "#f8fafc",
             "text-background-opacity": 1,
             "text-background-padding": "2px",
@@ -105,7 +151,7 @@ export default function GraphView() {
           style: {
             "line-color": "#0ea5e9",
             "target-arrow-color": "#0ea5e9",
-            width: 4,
+            width: 5,
           },
         },
         {
@@ -120,10 +166,17 @@ export default function GraphView() {
         name: "cose",
         animate: false,
         fit: true,
-        padding: 30,
+        padding: 40,
         nodeRepulsion: () => 9000,
         idealEdgeLength: () => 130,
       } as cytoscape.LayoutOptions,
+    });
+
+    // Guarantee every node is inside the visible container once the
+    // layout settles, and remember the initial viewport for Reset.
+    cy.one("layoutstop", () => {
+      cy.fit(cy.elements(), 40);
+      initialViewRef.current = { zoom: cy.zoom(), pan: { ...cy.pan() } };
     });
 
     cy.on("tap", "edge", (evt: cytoscape.EventObject) => {
@@ -154,8 +207,25 @@ export default function GraphView() {
     return () => {
       cy.destroy();
       cyRef.current = null;
+      initialViewRef.current = null;
     };
   }, [graph]);
+
+  const fitView = () => {
+    const cy = cyRef.current;
+    if (cy) cy.fit(cy.elements(), 40);
+  };
+
+  const resetView = () => {
+    const cy = cyRef.current;
+    const initial = initialViewRef.current;
+    if (cy && initial) {
+      cy.zoom(initial.zoom);
+      cy.pan(initial.pan);
+    } else if (cy) {
+      cy.fit(cy.elements(), 40);
+    }
+  };
 
   if (error) return <div className="error-box">{error}</div>;
 
@@ -163,22 +233,48 @@ export default function GraphView() {
     <div>
       <h2>Dependency Graph</h2>
       <div className="graph-note">
-        <strong>Reading the graph:</strong> an arrow <code>A → B</code> means{" "}
-        <strong>A depends on B</strong> (e.g. <code>program:WARR001 → copybook:WARRCOPY</code>{" "}
-        means WARR001 uses copybook WARRCOPY). Click any edge to see the source
-        evidence behind it; click a node to see its id and type.
+        <button
+          type="button"
+          className="hint-toggle"
+          aria-expanded={hintOpen}
+          onClick={() => setHintOpen((o) => !o)}
+        >
+          {hintOpen ? "▾" : "▸"} Reading the graph
+        </button>
+        {hintOpen && (
+          <span className="hint-body">
+            {" "}an arrow <code>A → B</code> means <strong>A depends on B</strong>{" "}
+            (e.g. <code>program:WARR001 → copybook:WARRCOPY</code> means WARR001
+            uses copybook WARRCOPY). Click any edge to see the source evidence
+            behind it; click a node to see its id and type.
+          </span>
+        )}
       </div>
 
-      <div className="legend">
-        {(Object.keys(TYPE_STYLE) as ComponentType[]).map((t) => (
-          <span key={t} className="legend-item">
-            <span
-              className="legend-dot"
-              style={{ backgroundColor: TYPE_STYLE[t].color }}
-            />
-            {TYPE_LABEL[t]}
-          </span>
-        ))}
+      <div className="graph-toolbar">
+        <div className="legend">
+          {(Object.keys(TYPE_STYLE) as ComponentType[]).map((t) => (
+            <span key={t} className="legend-item">
+              <span
+                className="legend-dot"
+                style={{ backgroundColor: TYPE_STYLE[t].color }}
+              />
+              {TYPE_LABEL[t]}
+            </span>
+          ))}
+        </div>
+        <div className="graph-controls">
+          <button type="button" className="btn btn-small" onClick={fitView}>
+            Fit to view
+          </button>
+          <button
+            type="button"
+            className="btn btn-small btn-ghost"
+            onClick={resetView}
+          >
+            Reset view
+          </button>
+        </div>
       </div>
 
       {!graph && !error && <p className="muted">Loading graph…</p>}
