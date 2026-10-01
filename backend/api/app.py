@@ -16,13 +16,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from backend.graph.dependency_graph import DependencyGraph
 from backend.graph.impact_analyzer import ImpactAnalyzer
 from backend.parsers.repository_scanner import scan_repository
 from backend.api.changeset import router as changeset_router
+from backend.api.github import router as github_router
 from backend.api.intelligence import router as intelligence_router
 
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -48,6 +52,34 @@ def _build() -> tuple[DependencyGraph, ImpactAnalyzer]:
 GRAPH, ANALYZER = _build()
 app.include_router(intelligence_router)  # Phase 2A intelligence endpoints
 app.include_router(changeset_router)  # Phase 3A change-set endpoints (additive)
+app.include_router(github_router)  # Phase 3B GitHub PR endpoints (additive)
+
+
+# Phase 3B is a security-sensitive request boundary: with
+# ``extra="forbid"`` FastAPI's default 422 body echoes caller-supplied
+# values (the ``input``/``ctx`` fields), so a smuggled ``token`` or
+# ``authorization`` field would be reflected back in the response. On
+# the GitHub boundary we keep location, error type, and message, but
+# never the supplied value. Every other endpoint keeps FastAPI's
+# established validation output unchanged.
+_GITHUB_VALIDATION_PREFIX = "/api/github/"
+
+
+@app.exception_handler(RequestValidationError)
+async def _github_boundary_validation_errors(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    if request.url.path.startswith(_GITHUB_VALIDATION_PREFIX):
+        sanitized = [
+            {
+                "loc": list(err.get("loc", ())),
+                "type": err.get("type"),
+                "msg": err.get("msg"),
+            }
+            for err in exc.errors()
+        ]
+        return JSONResponse(status_code=422, content={"detail": sanitized})
+    return await request_validation_exception_handler(request, exc)
 
 
 def _require(component_id: str) -> None:

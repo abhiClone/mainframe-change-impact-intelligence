@@ -83,3 +83,24 @@ goes through the exact pipeline above, and the results are merged at the release
 deduplicated impact union with per-root provenance, impact-overlap detection, strongest-priority
 test merge (`MUST_RUN > SHOULD_RUN`), merged DB2 resources, signals, checklist, and incidents.
 Full rules: `docs/CHANGE_SET_ANALYSIS.md`.
+
+## Pull requests: a real GitHub PR as a change set (Phase 3B, unreleased)
+
+`github_pr.py` (CLI), `POST /api/github/pull-request/analyze`, and the **GitHub PR**
+UI view (seventh view) run the same pipeline against an actual pull request:
+
+1. The PR is identified by `owner`, `repo`, `pull_number`, and `source_root`
+   (the Mainframe subtree, e.g. `sample_mainframe`).
+2. The backend fetches PR metadata and the changed-file list (paginated,
+   `per_page=100`). More than 3000 files fails closed with
+   `incomplete_change_set` — no impact is ever computed from a partial list.
+3. Exact `base.sha` / `head.sha` snapshots are materialized into secure
+   temporary directories (pre-scanned, size-limited, deleted afterwards);
+   fork PRs download base and head from their respective repositories.
+4. Files outside `source_root` stay visible but never enter the analysis;
+   renames crossing the source-root boundary become `added`/`deleted`, with
+   the original GitHub status preserved for provenance.
+5. The frozen Phase 3A engine produces the identical `ChangeSetIntelligence`
+   an equivalent explicit change set would — GitHub never determines impact.
+
+Full rules: `docs/GITHUB_PR_ANALYSIS.md`.

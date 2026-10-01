@@ -840,3 +840,168 @@ outputs byte-identical to f1009b4 via a scratch worktree).
 
 Stop: no commit, no merge, no push, no tag, no release, no Phase 3B.
 Branch left ready for final audit.
+
+## 2026-09-26 — Phase 3B (development, unreleased): GitHub PR analysis
+
+Branch `phase3b-github-pr-analysis` (from public main `14187c9`). Read-only
+GitHub change-source adapter feeding the frozen Phase 3A engine — GitHub never
+determines impact. No commit, no merge, no push, no tag, no release.
+
+Backend (`backend/github/`):
+- `errors.py` — typed `GitHubError`, 13 codes, secret-free messages.
+- `models.py` — `PullRequestRequest/Metadata`, `GitHubChangedFile`,
+  `SnapshotMetadata`, `GitHubRateLimit`, `GitHubPullRequestAnalysis`
+  (embeds Phase 3A `ChangeSetIntelligence` intact); pinned
+  `GITHUB_API_VERSION = "2026-03-10"`.
+- `client.py` — read-only REST: PR metadata, paginated files
+  (`per_page=100`, fail-closed above 3000 or on incomplete pagination),
+  exact-SHA tarball fetch; manual 302 handling with approved-host check
+  (`codeload.github.com`) and no `Authorization` forwarding; bounded retries
+  on 5xx/network only; `trust_env=False` (no ambient proxy inheritance).
+- `snapshots.py` — secure extraction: member pre-scan, traversal/absolute/
+  Windows-path/symlink/hard-link/device/FIFO rejection, tar-slip/zip-slip
+  containment, limits 100 MiB download / 256 MiB extracted / 50,000 files /
+  20 MiB per file; `source_root` resolution.
+- `provider.py` — Phase 3A `ChangeSetProvider`: status translation
+  (added/modified/removed→deleted/renamed; unknown fails closed),
+  `source_root` scope classification, four rename-boundary cases,
+  containment-checked base-snapshot reads for deletions/rename old-paths.
+- `service.py` — orchestration: metadata → files → base/head snapshots →
+  provider → frozen `ChangeSetAnalyzer`; fork-aware snapshot repos
+  (null `head.repo` → exact-SHA fetch from base repo or
+  `head_snapshot_unavailable`); temp-dir cleanup; per-file GitHub provenance.
+- `backend/api/github.py` — `POST /api/github/pull-request/analyze`,
+  `GET /api/github/status` (`auth_configured` only); router registered in
+  `backend/api/app.py`.
+- `github_pr.py` — CLI (deliberately no `--token` flag); human + `--json`
+  output reusing the Phase 3A renderer.
+
+Verification (all executed):
+- Backend: **371 passed, 0 failed** (255 frozen v1.1.0 + 116 new: client 27,
+  snapshots 21, provider 33, equivalence 4, API 24, CLI 7) — zero regressions.
+- Release-blocking equivalence test: mocked GitHub PR resolving to
+  WARRCOPY+WARR002 yields semantically identical `ChangeSetIntelligence` to
+  Phase 3A explicit input (2 changed, 1 cross-impacted, 4 downstream,
+  3/3/3 direct/transitive/overlap unions, 7 tests — 6 MUST_RUN / 1
+  SHOULD_RUN, 1 DB2 read / 2 writes, 7 risks, 7 checklist, 11 incidents).
+- Frontend: **49 passed, 0 failed** (34 frozen + 15 new `GitHubPRView`);
+  `ChangeSetView` refactored to shared `ChangeSetResults` with all 17
+  existing tests passing unmodified; seventh **GitHub PR** view;
+  `npm run build` succeeds; source inspection proves no `GITHUB_TOKEN` /
+  `Authorization` in browser code.
+- Supplemental read-only live smoke (agent network, no test depends on it):
+  pinned version header accepted
+  (`x-github-api-version-selected: 2026-03-10`); file-object shape confirmed
+  (`previous_filename` present on renames only — the model handles both).
+- Docs: new `docs/GITHUB_PR_ANALYSIS.md`; README, ROADMAP, ARCHITECTURE,
+  HOW_IT_WORKS, PROCESS_FLOW, API, SETUP, TESTING, DEMO_GUIDE, LIMITATIONS,
+  SECURITY_AND_PRIVACY updated; `.env.example` documents `GITHUB_TOKEN`
+  (name only, never a value).
+
+Stop: no commit, no merge, no push, no tag, no release. Work left uncommitted
+on `phase3b-github-pr-analysis` for review.
+
+## 2026-09-26 — Phase 3B targeted security/correctness remediation (uncommitted)
+
+Remediation for the Phase 3B audit findings (M1, L1–L7). No commit, no
+push, no merge, no tag — left on `phase3b-github-pr-analysis` for final
+acceptance audit. Phase 3B is not released.
+
+- **M1 (archive redirect userinfo).** `_validate_archive_redirect` now
+  rejects redirect targets containing any URL userinfo (username/password
+  — httpx would otherwise synthesize `Authorization: Basic` at send time),
+  any non-default port (explicit `:443` is normalized away by httpx and
+  accepted), and uses exact normalized hostname comparison (lowercase,
+  trailing dot stripped; no `endswith`). Host allowlist unchanged
+  (`codeload.github.com`, `api.github.com` for relative resolution).
+- **Final-send Authorization proof.** New tests assert, per redirect
+  status 301/302/303/307/308 with an authenticated client, that the
+  archive request *as received by the mock transport* carries no
+  `Authorization` and no `Proxy-Authorization` header, while the API
+  request carries `Bearer`.
+- **L1 (secondary rate limit).** `403` + `Retry-After` now classifies as
+  `github_rate_limited` (GitHub's documented secondary/abuse signal);
+  ordinary permission 403s stay `repository_not_found_or_not_authorized`.
+  403/429 are never retried (no retry storm); reset time preserved.
+- **L2 (malformed upstream fields).** New `parse_github_count` helper and
+  `malformed_github_response` error (HTTP 502): non-integer or negative
+  counts and non-integer PR numbers become typed errors — no raw
+  `ValueError`, no traceback, no wrong deterministic analysis. Applied to
+  PR metadata and per-file counts.
+- **L3.** `PullRequestRequest` uses `extra="forbid"`: smuggled `token` /
+  `api_base_url` / `authorization` fields fail validation (HTTP 422).
+- **L4.** `source_root` bound to 1024 characters (`SOURCE_ROOT_MAX_LENGTH`,
+  documented); normal paths unaffected.
+- **L5.** Documentation corrected to the actual AI context: only
+  deterministic Phase 3A change-set intelligence reaches the explainer —
+  never PR title/author/number, repository metadata, patch text, archive
+  URLs, token, or snapshot contents.
+- **L6.** `changed_files < 0` rejected as `malformed_github_response`.
+- **L7.** `trust_env=False` kept; documented as a deliberate limitation
+  (no ambient proxy support).
+- Tests: `backend/tests/test_github_remediation.py` — 55 new tests.
+- Docs updated: `docs/GITHUB_PR_ANALYSIS.md`, `docs/SECURITY_AND_PRIVACY.md`,
+  `docs/LIMITATIONS.md`, `docs/API.md`.
+
+Stop: no commit, no push, no merge, no tag, no release, no Phase 3C.
+Work left uncommitted on `phase3b-github-pr-analysis` for review.
+
+## 2026-10-01 — Phase 3B final hardening pass (pre-acceptance; uncommitted)
+
+Targeted hardening on `phase3b-github-pr-analysis` (HEAD 14187c9),
+ordered before the final acceptance audit. No commit/push/merge/tag/
+release; Phase 3C not started.
+
+- **Strict upstream metadata validation.** `get_pull_request` now treats
+  the GitHub response as externally supplied data: `base.sha`/`head.sha`
+  must be full 40-char lowercase hex commit SHAs (`parse_commit_sha`),
+  `base.repo.full_name`/`head.repo.full_name` must be structurally valid
+  `owner/repository` names reusing the user-input semantics
+  (`parse_repo_full_name`), `base.ref`/`head.ref` must be non-empty
+  bounded control-char-free strings (`parse_git_ref`), and PR-level
+  `changed_files` must be a genuine non-negative integer
+  (`parse_strict_count`: missing/null/string/float/negative rejected).
+  Violations raise typed `malformed_github_response` — no raw KeyError/
+  ValueError, no silent branch/merge-SHA/HEAD substitution.
+- **Deleted-fork semantics preserved.** `head.repo: null` stays
+  legitimate; the head snapshot is fetched from the base repository by
+  exact head SHA, else `head_snapshot_unavailable`.
+- **Snapshot request identity.** Service-level tests prove snapshots are
+  requested with exactly the validated base/head full names and SHAs —
+  no fork-head reuse of the requested owner/repo.
+- **Redirect policy tightened.** Trailing-dot hosts are now rejected
+  (exact explicit host allowlist; case normalization only). Documented
+  fail-closed archive host policy: only the audited `codeload.github.com`
+  is accepted; GitHub documents no fixed redirect host.
+- **Sanitized 422s.** `backend/api/app.py` gains a narrow
+  `RequestValidationError` handler scoped to `/api/github/`: 422 bodies
+  carry only error location/type/message, never the caller-supplied
+  value. Other endpoints keep FastAPI's established output.
+- `trust_env=False` unchanged (documented limitation).
+- Tests: `backend/tests/test_github_hardening.py` — 73 new tests.
+  Full backend: 499 passed. Frontend: 49 passed. Build: passed.
+- Docs updated: `docs/GITHUB_PR_ANALYSIS.md`, `docs/SECURITY_AND_PRIVACY.md`,
+  `docs/LIMITATIONS.md`, `docs/API.md`, `docs/TESTING.md`.
+
+Stop: no commit, no push, no merge, no tag, no release, no Phase 3C.
+Work left uncommitted on `phase3b-github-pr-analysis` for the final
+acceptance audit.
+
+## 2026-10-01 — Browser acceptance (same-host real Chromium)
+
+Automated Playwright audit (`browser_acceptance/run_audit.py`) with Chrome
+for Testing 153.0.8010.12 against local backend+frontend (127.0.0.1,
+distinctive fake token in backend env), three viewports
+(1440x900/1280x800/900x800), all seven views, GitHub PR scenarios served
+by route interception of a real deterministic backend result
+(`browser_acceptance/make_canned_pr.py`, no live GitHub).
+
+Result: pass at all viewports — no page overflow, no page errors, all PR
+scenarios correct, network confined to 127.0.0.1/localhost, token absent
+from DOM/storage/cookies. One defect found and fixed in-pass: a
+200-character PR title clipped past the card edge; fixed with
+`overflow-wrap: anywhere` on `.intel-section-head h3`
+(`frontend/src/App.css`), re-verified. Notes: /opt/meta-chromium/chrome
+(152) could not be used — its Local Network Access checks block even
+browser-initiated navigation to 127.0.0.1 in this sandbox; the environment
+proxy was bypassed with --no-proxy-server.

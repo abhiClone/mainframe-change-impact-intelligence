@@ -5,6 +5,7 @@ import ImpactView from "./views/ImpactView";
 import GraphView from "./views/GraphView";
 import IntelligenceView from "./views/IntelligenceView";
 import ChangeSetView from "./views/ChangeSetView";
+import GitHubPRView from "./views/GitHubPRView";
 import { API_BASE } from "./api";
 import "./App.css";
 
@@ -15,6 +16,7 @@ const TABS = [
   { id: "graph", label: "Graph" },
   { id: "intelligence", label: "Release Intelligence" },
   { id: "changeset", label: "Release / Change Set" },
+  { id: "githubpr", label: "GitHub PR" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -52,6 +54,7 @@ export default function App() {
         {tab === "graph" && <GraphView key="graph" />}
         {tab === "intelligence" && <IntelligenceView />}
         {tab === "changeset" && <ChangeSetView />}
+        {tab === "githubpr" && <GitHubPRView />}
       </main>
 
       <footer className="app-footer">

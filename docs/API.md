@@ -10,6 +10,7 @@ Component ids use the `"<kind>:<NAME>"` form (e.g. `copybook:WARRCOPY`).
 | Unknown component id | HTTP 404 with a clear message (same contract across all `{component_id}` endpoints) |
 | Unknown incident id | HTTP 404 |
 | Corrupted incident dataset / test catalog | HTTP 500 naming the problem (fail loud, never silent) |
+| GitHub adapter errors (`/api/github/*`) | HTTP status per the typed mapping below, with body `{"detail": {"code": "<code>", "message": "<safe message>"}}` — no raw GitHub bodies, no secrets, no tracebacks |
 
 ## Endpoints
 
@@ -111,6 +112,71 @@ Ambiguous files with no resolution contribute no impact — nothing is
 auto-selected. Invalid resolutions return HTTP 400; malformed payloads
 return HTTP 422. Duplicate `(path, old_path, status)` entries are
 deduplicated; conflicting statuses for one path are rejected (400).
+
+### `POST /api/github/pull-request/analyze` (Phase 3B, unreleased)
+
+Read-only GitHub PR analysis. The request identifies the PR and the Mainframe
+subtree — the token is **never** accepted via the API (server-side
+`GITHUB_TOKEN` only):
+
+```json
+{
+  "owner": "abhiClone",
+  "repo": "mainframe-change-impact-intelligence",
+  "pull_number": 42,
+  "source_root": "sample_mainframe"
+}
+```
+
+Validation: `owner` (GitHub login shape, no URLs), `repo` (name shape, no
+slashes/URLs), `pull_number` (integer > 0), `source_root` (safe
+repository-relative path, default `"."`; rejects `..`, absolute paths,
+Windows drive/UNC paths, and values over 1024 characters). Unknown
+request fields are rejected (`extra="forbid"`). Malformed payloads
+return HTTP 422; an unsafe `source_root` returns HTTP 400
+(`invalid_source_root`). On this security-sensitive boundary, HTTP 422
+validation errors are sanitized: the response carries only error
+location, type, and message — never the caller-supplied value — so a
+smuggled field such as `token` is not reflected back. Other endpoints
+keep FastAPI's established validation output.
+
+Returns `GitHubPullRequestAnalysis`: `provider`, `repository`, `pull_request`
+(number, title, state, draft, `html_url`, author, base/head refs + exact SHAs
++ repositories, file counts), `source_root`, `github_files` (every PR file with
+GitHub status, previous path, additions/deletions, `in_source_scope` /
+`outside_source_scope`, effective Phase 3A status, mapping status, mapped
+components, snapshot provenance), `in_scope_files`, `outside_scope_files`,
+`base_snapshot` / `head_snapshot` (repository, SHA, file/byte counts),
+`change_set_intelligence` (the Phase 3A result, embedded intact), and
+`rate_limit` (safe operational metadata only).
+
+Known-error mapping (body `{"detail": {"code", "message"}}`):
+
+| Code | HTTP | Meaning |
+|---|---|---|
+| `repository_not_found_or_not_authorized` | 404 | Unknown repo, or the configured credentials cannot access it (deliberately indistinguishable) |
+| `pull_request_not_found` | 404 | No such PR in the repository |
+| `github_authentication_failed` | 401 | Token rejected by GitHub |
+| `github_rate_limited` | 429 | Primary (403 `x-ratelimit-remaining: 0`), secondary (403 + `Retry-After`), or 429 rate limit; `message` carries the reset time; not retried |
+| `github_unavailable` | 502 | GitHub unreachable or repeated 5xx after bounded retries |
+| `malformed_github_response` | 502 | Upstream schema violation (non-integer/negative counts, non-integer PR number, invalid commit SHAs, malformed refs, malformed repository full names, missing base/head objects) — typed, never a raw `ValueError` |
+| `incomplete_change_set` | 422 | PR changes > 3000 files, or pagination incomplete — no partial-list analysis is produced |
+| `unsupported_github_status` | 422 | Unknown file status from GitHub — never silently converted |
+| `snapshot_download_failed` | 502 | Tarball fetch failed, or the archive redirect pointed at a non-approved host, used userinfo, used a non-default port, or used a trailing-dot host |
+| `snapshot_too_large` | 413 | Archive exceeded the download/extraction/file-count limits — never silently truncated |
+| `unsafe_archive` | 422 | Archive member failed the security pre-scan (traversal, symlink, device, …) |
+| `invalid_source_root` | 400 | Unsafe `source_root` value (traversal, absolute path, or over 1024 characters) |
+| `head_snapshot_unavailable` | 422 | Head SHA cannot be fetched (e.g. deleted fork with no deterministic fallback) |
+| `analysis_failed` | 500 | Frozen Phase 3A analysis raised unexpectedly |
+
+### `GET /api/github/status` (Phase 3B, unreleased)
+
+```json
+{"provider": "github", "auth_configured": true}
+```
+
+Reports only whether a server-side `GITHUB_TOKEN` is configured — never the
+token, its prefix/length, scopes, or headers.
 
 ## Notes for integrators
 
