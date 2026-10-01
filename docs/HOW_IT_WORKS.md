@@ -84,7 +84,7 @@ deduplicated impact union with per-root provenance, impact-overlap detection, st
 test merge (`MUST_RUN > SHOULD_RUN`), merged DB2 resources, signals, checklist, and incidents.
 Full rules: `docs/CHANGE_SET_ANALYSIS.md`.
 
-## Pull requests: a real GitHub PR as a change set (Phase 3B, unreleased)
+## Pull requests: a real GitHub PR as a change set (Phase 3B, released in v1.2.0)
 
 `github_pr.py` (CLI), `POST /api/github/pull-request/analyze`, and the **GitHub PR**
 UI view (seventh view) run the same pipeline against an actual pull request:

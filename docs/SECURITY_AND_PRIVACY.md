@@ -13,7 +13,7 @@ repository.
 - The only credential surface is the optional LLM provider, configured exclusively
   via environment variables: `INTELLIGENCE_PROVIDER`, `INTELLIGENCE_LLM_ENDPOINT`,
   `INTELLIGENCE_LLM_API_KEY`, `INTELLIGENCE_LLM_MODEL`.
-- Phase 3B (unreleased) adds a second credential surface: `GITHUB_TOKEN`, also
+- Phase 3B (released in v1.2.0) adds a second credential surface: `GITHUB_TOKEN`, also
   configured exclusively via the server environment — never via a CLI flag
   (none exists), API request body, query parameter, URL, or browser form.
   It is never written to logs, tracebacks, exceptions, API responses, local
@@ -35,7 +35,7 @@ repository.
 - The frontend calls the API directly from the browser; no secrets are shipped to
   the client (there are none to ship — the API key, if configured, stays
   server-side in the environment).
-- Phase 3B (unreleased): all GitHub interaction is server-side. The browser
+- Phase 3B (released in v1.2.0): all GitHub interaction is server-side. The browser
   only ever calls the local backend; the frontend never contacts
   `api.github.com` or `codeload.github.com` (the only GitHub URL in the UI is
   the user-clicked "View on GitHub" link).
@@ -47,7 +47,7 @@ deterministic artifacts — component ids, paths, evidence refs, test/signal/che
 summaries, incident summaries. No repository paths, no raw source text. If a remote
 LLM is configured, only this bounded context leaves the machine.
 
-## GitHub PR adapter (Phase 3B, unreleased)
+## GitHub PR adapter (Phase 3B, released in v1.2.0)
 
 - **Token handling.** `GITHUB_TOKEN` is read only from the server environment.
   It is never accepted from a CLI flag (none exists), API request body, query

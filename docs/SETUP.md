@@ -55,7 +55,7 @@ INTELLIGENCE_LLM_MODEL=...
 Never commit real keys. The HTTP provider has not been live-tested with a paid API
 (see `docs/LIMITATIONS.md`). Any failure falls back to the deterministic provider.
 
-### GitHub PR analysis (Phase 3B, unreleased)
+### GitHub PR analysis (Phase 3B, released in v1.2.0)
 
 The read-only GitHub adapter needs a token only for private repositories —
 public repositories work without one (at a lower rate limit). Copy

@@ -95,7 +95,7 @@ Recap the three badges and the principle:
 Offer to show the guard code (`backend/intelligence/ai/guard.py`) or the relevance
 engine (`backend/intelligence/incidents/relevance.py`) for the technically curious.
 
-## 8. GitHub PR — a real pull request as a change set (Phase 3B, unreleased, 2 min)
+## 8. GitHub PR — a real pull request as a change set (Phase 3B, released in v1.2.0, 2 min)
 
 Open the seventh tab, **GitHub PR**. Enter a repository (`owner/repo`), a PR
 number, and the Mainframe source root, then **Analyze Pull Request**:

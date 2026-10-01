@@ -113,7 +113,7 @@ auto-selected. Invalid resolutions return HTTP 400; malformed payloads
 return HTTP 422. Duplicate `(path, old_path, status)` entries are
 deduplicated; conflicting statuses for one path are rejected (400).
 
-### `POST /api/github/pull-request/analyze` (Phase 3B, unreleased)
+### `POST /api/github/pull-request/analyze` (Phase 3B, released in v1.2.0)
 
 Read-only GitHub PR analysis. The request identifies the PR and the Mainframe
 subtree — the token is **never** accepted via the API (server-side
@@ -169,7 +169,7 @@ Known-error mapping (body `{"detail": {"code", "message"}}`):
 | `head_snapshot_unavailable` | 422 | Head SHA cannot be fetched (e.g. deleted fork with no deterministic fallback) |
 | `analysis_failed` | 500 | Frozen Phase 3A analysis raised unexpectedly |
 
-### `GET /api/github/status` (Phase 3B, unreleased)
+### `GET /api/github/status` (Phase 3B, released in v1.2.0)
 
 ```json
 {"provider": "github", "auth_configured": true}

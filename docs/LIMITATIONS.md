@@ -64,7 +64,7 @@ either pinned by a test, documented in code, or both.
 
 - **Vite/Cytoscape produces a non-blocking chunk-size warning** on build.
 
-## GitHub PR analysis (Phase 3B, unreleased)
+## GitHub PR analysis (Phase 3B, released in v1.2.0)
 
 - **github.com only.** No GitHub Enterprise support yet.
 - **3000-file REST limit.** PRs changing more than 3000 files fail closed

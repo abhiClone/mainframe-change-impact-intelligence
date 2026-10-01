@@ -12,7 +12,7 @@
 
 The 255 frozen tests are unchanged: 166 frozen-phase tests (below) plus the
 89 Phase 3A tests (see "Phase 3A (released in v1.1.0)" below). Phase 3B adds
-116 tests across six new suites — see "Phase 3B (unreleased)" below.
+116 tests across six new suites — see "Phase 3B (released in v1.2.0)" below.
 
 - **Parsers & robustness** (`test_phase1.py`, `test_parser_robustness.py`):
   COPY/CALL/SELECT/INSERT/UPDATE/DELETE extraction, JCL `PGM=`/`PROC=`, comment
@@ -120,7 +120,7 @@ Merged into `main` and tagged `phase3a-complete` (frozen 2026-09-26):
   `v1.0.0`/`interview-ready-baseline` state; Phase 3A adds to them without
   changing frozen behaviour.
 
-## Phase 3B (unreleased — branch `phase3b-github-pr-analysis`)
+## Phase 3B (released in v1.2.0, merged into main)
 
 No test depends on live GitHub, CI, or the network: HTTP is mocked with
 `httpx.MockTransport` and archives are built in-test. A read-only live smoke

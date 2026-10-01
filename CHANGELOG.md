@@ -9,6 +9,47 @@ baselines keep their own frozen records at the repository root:
 - `AUDITED_PRODUCT_BASELINE.md` — post-Phase-2B product audit remediation
 - `INTERVIEW_READY_BASELINE.md` — interview-ready product baseline (final graph + Release Intelligence UX)
 - `PHASE3A_BASELINE.md` — Phase 3A: deterministic change-set & release candidate analysis
+- `PHASE3B_BASELINE.md` — Phase 3B: GitHub Pull Request impact analysis
+
+## [1.2.0] — 2026-10-01
+
+Phase 3B: read-only GitHub Pull Request impact analysis. GitHub acts only as
+the source of the change set; Phase 3A remains authoritative for all
+deterministic Mainframe impact intelligence.
+
+### Added
+- Read-only GitHub Pull Request analysis.
+- Exact base/head SHA snapshots for analysis.
+- Fork PR support, including deleted-fork handling.
+- Changed-file pagination with >3000-file fail-closed behavior.
+- Source-root scoping for PR files.
+- Added/modified/deleted/renamed PR file handling.
+- GitHub provenance on every analysis.
+- GitHub PR CLI (`github_pr.py`).
+- GitHub PR API (`POST /api/github/pull-request/analyze`, `GET /api/github/status`).
+- Seventh GitHub PR UI view.
+
+### Changed
+- Phase 3A change-set intelligence can now be populated from actual GitHub PRs.
+- Phase 3A remains the single deterministic analysis engine.
+
+### Security
+- GITHUB_TOKEN remains server-side only.
+- No frontend token handling.
+- No GitHub write operations.
+- Redirect credentials are stripped/rejected.
+- Userinfo/trailing-dot/non-default-port redirect targets rejected.
+- Unsafe archives rejected.
+- Archive size/resource limits enforced.
+- Partial PR file lists never analyzed.
+- Malformed GitHub metadata fails closed.
+
+### Verification
+- 499 backend tests passed.
+- 49 frontend tests passed.
+- Production build passed.
+- Chromium acceptance at 1440x900 / 1280x800 / 900x800 passed.
+- Phase 3A equivalence passed.
 
 ## [1.1.0] — 2026-09-26
 

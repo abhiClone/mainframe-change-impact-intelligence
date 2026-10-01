@@ -59,7 +59,7 @@ flowchart TD
 | `backend/api/intelligence.py` | Phase 2A/2B router: `/api/intelligence/{id}`, tests, signals, catalog, incidents |
 | `backend/intelligence/ai/` | `ai_models` (strict contract) → `providers` → `guard` → `service.explain_change()` |
 | `backend/changeset/` | `models` (change-set result contract) → `mapping` (file→component) → `providers` (explicit list / git diff) → `service` (multi-root aggregation over the frozen layers) → `ai` (change-set explainer + extended guard) |
-| `backend/github/` (Phase 3B, unreleased) | Read-only GitHub PR change-source adapter → feeds the frozen Phase 3A analyzer. `errors` (typed, secret-free) → `models` (incl. pinned `GITHUB_API_VERSION`) → `client` (read-only REST, manual redirect handling) → `snapshots` (pre-scan + containment + size limits) → `provider` (status translation, source-root scope, rename boundaries) → `service` (orchestration). No GitHub-specific impact engine exists. |
+| `backend/github/` (Phase 3B, released in v1.2.0) | Read-only GitHub PR change-source adapter → feeds the frozen Phase 3A analyzer. `errors` (typed, secret-free) → `models` (incl. pinned `GITHUB_API_VERSION`) → `client` (read-only REST, manual redirect handling) → `snapshots` (pre-scan + containment + size limits) → `provider` (status translation, source-root scope, rename boundaries) → `service` (orchestration). No GitHub-specific impact engine exists. |
 
 ## Key design decisions (summary)
 
@@ -71,7 +71,7 @@ flowchart TD
 
 Full rationale: `docs/DESIGN_DECISIONS.md`. Phase working notes: `docs/archive/`.
 
-## Phase 3B adapter (unreleased, branch `phase3b-github-pr-analysis`)
+## Phase 3B adapter (released in v1.2.0, merged into main)
 
 GitHub is a **change-source adapter**, not a new analysis layer:
 

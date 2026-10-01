@@ -58,7 +58,7 @@ sequenceDiagram
     API-->>UI: intelligence bundle (JSON)
 ```
 
-## Request flow: `POST /api/github/pull-request/analyze` (Phase 3B, unreleased)
+## Request flow: `POST /api/github/pull-request/analyze` (Phase 3B, released in v1.2.0)
 
 ```mermaid
 sequenceDiagram
