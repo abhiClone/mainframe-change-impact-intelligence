@@ -21,13 +21,14 @@ python3.12 -m venv .venv
 ```
 
 `requirements.txt` declares compatible version constraints (lower bound = the stack
-verified by the frozen baselines, e.g. fastapi 0.141, networkx 3.7, pytest 9.1.1;
+verified by the frozen baselines, e.g. fastapi 0.141, networkx 3.7, pytest 9.1.1,
+httpx 0.28 (Phase 3B GitHub client);
 upper bound = next major). Transitive dependencies are left to pip's resolver.
 
 Verify:
 
 ```bash
-.venv/bin/python -m pytest backend/tests/ -q   # expect: 166 passed
+.venv/bin/python -m pytest backend/tests/ -q   # expect: 371 passed
 ```
 
 Start the API:
@@ -54,6 +55,23 @@ INTELLIGENCE_LLM_MODEL=...
 Never commit real keys. The HTTP provider has not been live-tested with a paid API
 (see `docs/LIMITATIONS.md`). Any failure falls back to the deterministic provider.
 
+### GitHub PR analysis (Phase 3B, unreleased)
+
+The read-only GitHub adapter needs a token only for private repositories —
+public repositories work without one (at a lower rate limit). Copy
+`.env.example` to `.env` (gitignored) and set:
+
+```bash
+GITHUB_TOKEN=...
+```
+
+Rules: the token is read **only** from the `GITHUB_TOKEN` environment variable —
+never from a CLI flag (there is deliberately none), an API field, a URL, or the
+browser. Prefer a fine-grained personal access token with the minimum
+permissions **Pull requests: read** and **Contents: read**. Never commit a real
+token. `GET /api/github/status` reports only whether a token is configured
+(`auth_configured`), never any token details. See `docs/GITHUB_PR_ANALYSIS.md`.
+
 ## Frontend
 
 ```bash
@@ -64,7 +82,7 @@ npm ci            # reproducible install from package-lock.json
 Verify:
 
 ```bash
-npm test          # Vitest: 17 tests
+npm test          # Vitest: 49 tests
 npm run build     # tsc -b && vite build (expect a non-blocking Cytoscape chunk-size warning)
 npm run dev       # Vite dev server on http://localhost:5173
 ```

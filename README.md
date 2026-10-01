@@ -70,6 +70,7 @@ The deterministic-first principle is unchanged: AI may only explain verified res
 | **Release checklist** | 7 deterministic items per change scenario, each citing its triggering rule |
 | **Historical incident intelligence** | 17 synthetic incidents, deterministically matched by 5 reason types; severity separate from relevance |
 | **Change-set / release analysis** | Multi-root aggregation of the frozen layers: deduped impact union, overlap detection, strongest-priority test merge, per-root provenance, honest uncertainty on ambiguous/unmapped/deleted files |
+| **GitHub PR analysis (Phase 3B, unreleased)** | Read-only change-source adapter: PR metadata + changed files + exact base/head SHA snapshots feed the frozen Phase 3A engine — GitHub never determines impact |
 | **Grounded AI explanation (optional)** | An LLM may *summarise* the deterministic results; output is guard-validated and can never alter them |
 | **Interactive dependency graph** | Cytoscape graph with parallel-edge separation, Fit/Reset view, clickable evidence panel |
 | **Negative control** | `copybook:UNUSED` demonstrates the engine reporting a clean zero-result instead of inventing relationships |
@@ -85,12 +86,14 @@ flowchart TD
     INTEL["Release intelligence\n(test recommendations, risk signals, checklist)"]
     INC["Historical incident intelligence\n(validated dataset, deterministic relevance)"]
     CHG["Change-set aggregation\n(multi-root union, dedup, provenance, overlap)"]
+    GHPR["GitHub PR source (Phase 3B, unreleased)\nPR metadata + files + exact base/head snapshots"]
     AI["Optional AI explanation\n(grounded summary only, guard-validated)"]
     CLI["CLI\n(analyze.py / impact.py)"]
     API["FastAPI backend"]
     UI["React + Cytoscape frontend"]
 
     SRC --> PARSE --> GRAPH --> IMPACT --> INTEL --> INC --> CHG --> AI
+    GHPR --> CHG
     IMPACT --> CLI
     INTEL --> API
     INC --> API
@@ -110,6 +113,13 @@ flowchart TD
 6. The incident relevance engine matches the validated 17-incident dataset against the impact context using 5 deterministic reason types.
 7. Optionally, the AI layer serialises the deterministic results into a strict context, generates a four-section explanation, and the hallucination guard validates every identifier before the text can reach a user.
 8. Change-set analysis (`changeset.py`, `POST /api/change-set/analyze`, the Release / Change Set view) maps a set of changed files to components and runs steps 4–7 per changed component, then aggregates the results at the release level: explicit changed components (kept disjoint from downstream impact, with cross-impact between changed roots shown, never hidden), deduplicated downstream impact union with per-root snapshot provenance, overlap detection, strongest-priority test merge, merged DB2 resources (READ/WRITE independent), merged signals/checklist with order-invariant regenerated prose, and merged incidents. See `docs/CHANGE_SET_ANALYSIS.md`.
+
+Phase 3B (unreleased, on branch `phase3b-github-pr-analysis`) adds a read-only
+GitHub PR change-source adapter feeding the same engine: PR metadata, the
+paginated changed-file list, and exact base/head SHA snapshots are fetched from
+GitHub, while all component mapping, impact, tests, risks, checklists, and
+incidents are determined by the frozen Phase 3A engine. GitHub never determines
+impact. See `docs/GITHUB_PR_ANALYSIS.md`.
 
 ## The deterministic principle (read this first)
 
@@ -193,7 +203,8 @@ relationships from evidence rather than guessing.
 ## Repository structure
 
 ```
-├── analyze.py / impact.py / changeset.py   # CLIs: scan, single-component impact, change-set analysis
+├── analyze.py / impact.py / changeset.py / github_pr.py   # CLIs: scan, single-component impact,
+│                                                         #   change-set analysis, GitHub PR analysis (Phase 3B, unreleased)
 ├── backend/
 │   ├── parsers/                  # COBOL, JCL, PROC, SQL parsers + repository scanner (frozen)
 │   ├── graph/                    # NetworkX MultiDiGraph wrapper + impact analyzer (frozen)
@@ -202,12 +213,17 @@ relationships from evidence rather than guessing.
 │   │   ├── ai/                   #   incidents/, and the optional AI explanation layer
 │   ├── changeset/                # Phase 3A: change-set models, file→component mapper,
 │   │   └── ai/                   #   explicit/git providers, multi-root aggregation, AI explainer
+│   ├── github/                   # Phase 3B (unreleased): read-only GitHub PR adapter —
+│   │                             #   errors, models, REST client, secure snapshots, provider,
+│   │                             #   service (feeds the frozen Phase 3A analyzer)
 │   ├── api/                      # FastAPI app: /api/* (graph) + /api/intelligence/* etc.
-│   └── tests/                    # 219 backend tests (166 frozen-phase + 53 Phase 3A)
+│   │                             #   + /api/change-set/* (Phase 3A) + /api/github/* (Phase 3B, unreleased)
+│   └── tests/                    # 371 backend tests (255 frozen v1.1.0 + 116 Phase 3B)
 ├── frontend/src/
+│   ├── components/               # ChangeSetResults (shared Phase 3A/3B results renderer), EdgeList, EvidencePanel
 │   ├── views/                    # Overview, Dependency Explorer, Change Impact, Graph,
-│   │                             #   Release Intelligence, Release / Change Set
-│   └── __tests__/ / views/__tests__/   # 30 frontend tests (Vitest)
+│   │                             #   Release Intelligence, Release / Change Set, GitHub PR (Phase 3B, unreleased)
+│   └── __tests__/ / views/__tests__/   # 49 frontend tests (Vitest)
 ├── sample_mainframe/             # synthetic demo repository (COBOL, copybooks, JCL, PROCs, DB2 DDL,
 │                                 #   incidents, test catalog) — see "Synthetic data" below
 ├── screenshots/                  # UI captures used in this README and docs/DEMO_GUIDE.md
@@ -240,7 +256,7 @@ git clone https://github.com/abhiClone/mainframe-change-impact-intelligence.git 
 # 2. Backend: create venv, install, run tests
 python3.12 -m venv .venv
 .venv/bin/pip install -r requirements.txt
-.venv/bin/python -m pytest backend/tests/ -q        # 166 passed
+.venv/bin/python -m pytest backend/tests/ -q        # 371 passed
 
 # 3. Start the API
 ./run_api.sh                                         # http://127.0.0.1:8000
@@ -248,7 +264,7 @@ python3.12 -m venv .venv
 # 4. Frontend: install, test, run (new terminal)
 cd frontend
 npm ci
-npm test                                             # 17 passed
+npm test                                             # 49 passed
 npm run dev                                          # http://localhost:5173
 ```
 
@@ -282,8 +298,8 @@ The frontend expects the API at `http://localhost:8000`.
 ## Running tests
 
 ```bash
-./run_tests.sh                        # backend: 219 tests
-cd frontend && npm test               # frontend: 30 tests
+./run_tests.sh                        # backend: 371 tests
+cd frontend && npm test               # frontend: 49 tests
 ```
 
 Coverage: parsers and robustness, graph multi-edge semantics, impact direction, evidence
@@ -308,6 +324,9 @@ badges), parallel-edge independence, graph controls. See `docs/TESTING.md`.
 .venv/bin/python changeset.py --file copybook/WARRCOPY.cpy --file cobol/WARR002.cbl
 .venv/bin/python changeset.py --file sql/schema.sql --resolve sql/schema.sql=table:WARRANTY
 .venv/bin/python changeset.py --repo . --base HEAD~1 --head HEAD   # git diff mode (local repo)
+
+# GitHub PR analysis (Phase 3B, unreleased): token from GITHUB_TOKEN only (no --token flag)
+.venv/bin/python github_pr.py --repo owner/name --pr 42 --source-root sample_mainframe [--json]
 ```
 
 ## API overview
@@ -331,6 +350,8 @@ incident dataset returns HTTP 500 naming the problem. Full reference: `docs/API.
 | `GET /api/incidents/{incident_id}` | one incident |
 | `GET /api/incident-intelligence/{id}` | relevant incidents with deterministic reasons |
 | `POST /api/change-set/analyze` | change-set → release-candidate analysis: file mapping, per-change impact, deduped union, tests, signals, checklist, incidents, deterministic summary |
+| `POST /api/github/pull-request/analyze` | (Phase 3B, unreleased) GitHub PR → Mainframe change-set analysis: PR metadata, changed files, exact base/head SHA snapshots, embedded Phase 3A intelligence |
+| `GET /api/github/status` | (Phase 3B, unreleased) GitHub provider status: `auth_configured` only — never token details |
 
 ## AI trust boundary
 
@@ -349,8 +370,8 @@ parsing, not from AI. Details: `docs/AI_GROUNDING.md`, `docs/EVIDENCE_MODEL.md`.
 
 | Suite | Result |
 |---|---|
-| Backend (`pytest backend/tests/`) | **255 passed, 0 failed** |
-| Frontend (`npm test`, Vitest) | **34 passed, 0 failed** |
+| Backend (`pytest backend/tests/`) | **371 passed, 0 failed** (255 frozen v1.1.0 + 116 Phase 3B) |
+| Frontend (`npm test`, Vitest) | **49 passed, 0 failed** (34 frozen v1.1.0 + 15 Phase 3B) |
 | Production build (`npm run build`) | ✅ tsc + vite succeed (non-blocking Cytoscape chunk-size warning) |
 | Browser verification | Real Chromium at 1440×900, 1280×800, 900×800 — graph render, zoom/pan, Fit/Reset, evidence panel, parallel-edge click, intelligence view, empty states |
 
@@ -361,6 +382,7 @@ parsing, not from AI. Details: `docs/AI_GROUNDING.md`, `docs/EVIDENCE_MODEL.md`.
 - In-memory NetworkX graph (per process); 17 synthetic incidents, no semantic incident similarity.
 - HTTP LLM provider not live-tested with a paid API; AI prose is non-authoritative and not fully fact-checked.
 - COSE node positions may vary between page loads; dense at 900px width.
+- GitHub PR analysis (Phase 3B, unreleased): github.com only, 3000-file REST limit (fail-closed), synchronous analysis, read-only (no comments, check runs, webhooks, or merge blocking). Full detail: `docs/GITHUB_PR_ANALYSIS.md`.
 - Full list: `docs/LIMITATIONS.md`.
 
 ## Roadmap
@@ -368,6 +390,11 @@ parsing, not from AI. Details: `docs/AI_GROUNDING.md`, `docs/EVIDENCE_MODEL.md`.
 Frozen phases: Phase 1 (dependency engine) → Phase 2A (release intelligence + grounded AI) →
 Phase 2B (incident intelligence) → audit remediation → interview-ready UX baseline →
 Phase 3A (change-set & release candidate analysis, **v1.1.0**).
+In development (unreleased, on branch `phase3b-github-pr-analysis`): **Phase 3B** —
+read-only GitHub PR analysis. GitHub is a change-source adapter only (PR metadata,
+changed files, exact base/head SHA snapshots); the frozen Phase 3A engine determines
+all impact, tests, risks, and incidents — GitHub never determines impact.
+See `docs/GITHUB_PR_ANALYSIS.md`.
 Future candidates (not started): grammar-based COBOL parsing, CICS/IMS/MQ dependencies,
 persistent graph backend, real incident-source integrations, live LLM provider testing.
 Explicitly out of scope: automated release verdicts, failure-probability prediction, and any
@@ -384,6 +411,7 @@ See `ROADMAP.md`.
 | `docs/SETUP.md` | Detailed backend/frontend setup |
 | `docs/DEPENDENCY_MODEL.md` | Component and dependency model, evidence contract |
 | `docs/CHANGE_IMPACT.md` | Impact semantics, direction, WARRCOPY/UNUSED scenarios |
+| `docs/GITHUB_PR_ANALYSIS.md` | GitHub PR analysis (Phase 3B, unreleased): read-only adapter, exact snapshots, security, API |
 | `docs/RELEASE_INTELLIGENCE.md` | Impact context, risk signals, release checklist |
 | `docs/TEST_RECOMMENDATION.md` | Catalog schema, selection rule, MUST/SHOULD levels |
 | `docs/INCIDENT_INTELLIGENCE.md` | Incident dataset, relevance engine, severity ≠ relevance |

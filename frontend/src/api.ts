@@ -82,10 +82,38 @@ export interface ImpactResult {
 
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  /** Machine-readable error code when the backend returned a structured
+   *  detail object (e.g. the Phase 3B GitHub endpoints); null for legacy
+   *  string details. */
+  code: string | null;
+  constructor(status: number, message: string, code: string | null = null) {
     super(message);
     this.status = status;
+    this.code = code;
   }
+}
+
+/** Extract a human message (and optional machine code) from a FastAPI
+ *  error body. Legacy endpoints return {detail: string}; the Phase 3B
+ *  GitHub endpoints return {detail: {code, message}}. */
+function extractDetail(body: unknown): {
+  code: string | null;
+  message: string;
+} {
+  if (typeof body === "object" && body !== null && "detail" in body) {
+    const detail = (body as { detail?: unknown }).detail;
+    if (typeof detail === "string") {
+      return { code: null, message: detail };
+    }
+    if (typeof detail === "object" && detail !== null) {
+      const obj = detail as { code?: unknown; message?: unknown };
+      return {
+        code: typeof obj.code === "string" ? obj.code : null,
+        message: typeof obj.message === "string" ? obj.message : "",
+      };
+    }
+  }
+  return { code: null, message: "" };
 }
 
 /* ------------------------------------------------------------------ */
@@ -463,6 +491,104 @@ export interface ChangeSetAnalyzeRequest {
   resolutions?: Record<string, string[]>;
 }
 
+/* ------------------------------------------------------------------ */
+/* Phase 3B — GitHub Pull Request Analysis (read-only GitHub provider  */
+/* feeding the frozen Phase 3A change-set engine). GitHub supplies only */
+/* the changed-file list and exact base/head snapshots; all mapping,   */
+/* impact, tests, risks, checklist and incident intelligence is the     */
+/* deterministic Phase 3A result carried intact in change_set_intelli- */
+/* gence. The browser never talks to GitHub — only to this backend.    */
+/* ------------------------------------------------------------------ */
+
+export type GitHubFileStatus = "added" | "modified" | "removed" | "renamed";
+
+export type GitHubSourceScope = "in_source_scope" | "outside_source_scope";
+
+export type GitHubEffectiveStatus =
+  | "added"
+  | "modified"
+  | "deleted"
+  | "renamed"
+  | "unknown";
+
+export interface GitHubPullRequestRequest {
+  owner: string;
+  repo: string;
+  pull_number: number;
+  source_root: string;
+}
+
+export interface GitHubChangedFile {
+  filename: string;
+  previous_filename: string | null;
+  status: GitHubFileStatus;
+  additions: number;
+  deletions: number;
+  changes: number;
+  sha: string;
+  source_scope: GitHubSourceScope;
+  effective_status: GitHubEffectiveStatus | null;
+  source_relative_path: string | null;
+  source_relative_old_path: string | null;
+  mapping_status: string | null;
+  mapped_components: string[];
+  phase3a_snapshot: string | null;
+}
+
+export interface PullRequestMetadata {
+  number: number;
+  title: string;
+  state: string;
+  draft: boolean;
+  html_url: string;
+  author_login: string;
+  base_ref: string;
+  base_sha: string;
+  base_repo_full_name: string;
+  head_ref: string;
+  head_sha: string;
+  head_repo_full_name: string | null;
+  changed_files: number;
+  additions: number;
+  deletions: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SnapshotMetadata {
+  label: string;
+  repository_full_name: string;
+  sha: string;
+  file_count: number;
+  extracted_bytes: number;
+}
+
+export interface GitHubRateLimit {
+  limit: number | null;
+  remaining: number | null;
+  reset: number | null;
+  resource: string | null;
+}
+
+export interface GitHubPullRequestAnalysis {
+  provider: "github";
+  repository: string;
+  pull_request: PullRequestMetadata;
+  source_root: string;
+  github_files: GitHubChangedFile[];
+  in_scope_files: GitHubChangedFile[];
+  outside_scope_files: GitHubChangedFile[];
+  base_snapshot: SnapshotMetadata;
+  head_snapshot: SnapshotMetadata;
+  change_set_intelligence: ChangeSetIntelligence;
+  rate_limit: GitHubRateLimit | null;
+}
+
+export interface GitHubStatusResponse {
+  provider: "github";
+  auth_configured: boolean;
+}
+
 async function post<T>(path: string, body: unknown): Promise<T> {
   let res: Response;
   try {
@@ -478,14 +604,20 @@ async function post<T>(path: string, body: unknown): Promise<T> {
     );
   }
   if (!res.ok) {
+    let code: string | null = null;
     let detail = "";
     try {
-      const body = (await res.json()) as { detail?: string };
-      detail = body.detail ?? "";
+      const parsed = extractDetail(await res.json());
+      code = parsed.code;
+      detail = parsed.message;
     } catch {
       /* ignore */
     }
-    throw new ApiError(res.status, detail || `Request failed (${res.status})`);
+    throw new ApiError(
+      res.status,
+      detail || `Request failed (${res.status})`,
+      code
+    );
   }
   return (await res.json()) as T;
 }
@@ -501,14 +633,20 @@ async function get<T>(path: string): Promise<T> {
     );
   }
   if (!res.ok) {
+    let code: string | null = null;
     let detail = "";
     try {
-      const body = (await res.json()) as { detail?: string };
-      detail = body.detail ?? "";
+      const parsed = extractDetail(await res.json());
+      code = parsed.code;
+      detail = parsed.message;
     } catch {
       /* ignore */
     }
-    throw new ApiError(res.status, detail || `Request failed (${res.status})`);
+    throw new ApiError(
+      res.status,
+      detail || `Request failed (${res.status})`,
+      code
+    );
   }
   return (await res.json()) as T;
 }
@@ -534,6 +672,9 @@ export const api = {
     ),
   analyzeChangeSet: (request: ChangeSetAnalyzeRequest) =>
     post<ChangeSetIntelligence>("/api/change-set/analyze", request),
+  analyzeGitHubPR: (request: GitHubPullRequestRequest) =>
+    post<GitHubPullRequestAnalysis>("/api/github/pull-request/analyze", request),
+  getGitHubStatus: () => get<GitHubStatusResponse>("/api/github/status"),
 };
 
 export { API_BASE };

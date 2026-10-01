@@ -95,6 +95,31 @@ Recap the three badges and the principle:
 Offer to show the guard code (`backend/intelligence/ai/guard.py`) or the relevance
 engine (`backend/intelligence/incidents/relevance.py`) for the technically curious.
 
+## 8. GitHub PR — a real pull request as a change set (Phase 3B, unreleased, 2 min)
+
+Open the seventh tab, **GitHub PR**. Enter a repository (`owner/repo`), a PR
+number, and the Mainframe source root, then **Analyze Pull Request**:
+
+- The PR header shows number, title, state, author, base/head branches with
+  short SHAs — the analysis runs against the exact SHAs, never branch names.
+- **Changed Files** lists every PR file with its GitHub status, additions/
+  deletions, scope badge (`IN SCOPE` / `OUTSIDE SOURCE ROOT`), and mapping
+  status. GitHub status and mapping status are visually distinct; renames show
+  old → new paths.
+- The **VERIFIED PR CHANGE SET** badge means the file list came
+  deterministically from GitHub PR metadata — it does not claim GitHub verified
+  business correctness.
+- Below, the same intelligence sections as the Release / Change Set view render
+  via the shared `ChangeSetResults` component (identical numbers for identical
+  change sets).
+- There is deliberately **no token field**: private repositories use the
+  server-side `GITHUB_TOKEN`; the neutral auth badge reports only whether one
+  is configured.
+
+Demo note: automated tests mock GitHub (`httpx.MockTransport`) — no test
+depends on live GitHub. A live read-only smoke against a public PR is optional
+and supplemental only.
+
 ## Screenshots
 
 All views are captured in `screenshots/` and embedded in `README.md`:

@@ -14,11 +14,19 @@ before work begins.
 - ✅ Phase 3A — deterministic change-set & release candidate analysis
   (completed — released in **v1.1.0**, 2026-09-26)
 
-## Possible future phases (not started)
+## In progress (unreleased, uncommitted)
 
-### Phase 3B (future — does not exist yet)
-- GitHub Pull Request integration: analyse the files changed by a PR as a
-  Phase 3A change set directly from the PR diff. Not implemented.
+### Phase 3B — GitHub Pull Request analysis (on branch `phase3b-github-pr-analysis`)
+- Read-only GitHub change-source adapter: PR metadata, paginated changed files,
+  and exact base/head SHA snapshots feed the frozen Phase 3A engine.
+- GitHub never determines impact: component mapping, dependencies, impact,
+  tests, priorities, DB2 involvement, risk signals, checklists, and incident
+  relevance all come from the frozen deterministic layers.
+- Fail-closed boundaries: 3000-file REST limit, unsafe-archive rejection,
+  snapshot size limits — no impact is ever computed from a partial change set.
+- Full detail: `docs/GITHUB_PR_ANALYSIS.md`.
+
+## Possible future phases (not started)
 
 ### Phase 3 candidates
 - Real mainframe source parsing at scale: grammar/AST-based COBOL parser

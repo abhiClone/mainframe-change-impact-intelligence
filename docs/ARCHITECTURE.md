@@ -59,6 +59,7 @@ flowchart TD
 | `backend/api/intelligence.py` | Phase 2A/2B router: `/api/intelligence/{id}`, tests, signals, catalog, incidents |
 | `backend/intelligence/ai/` | `ai_models` (strict contract) → `providers` → `guard` → `service.explain_change()` |
 | `backend/changeset/` | `models` (change-set result contract) → `mapping` (file→component) → `providers` (explicit list / git diff) → `service` (multi-root aggregation over the frozen layers) → `ai` (change-set explainer + extended guard) |
+| `backend/github/` (Phase 3B, unreleased) | Read-only GitHub PR change-source adapter → feeds the frozen Phase 3A analyzer. `errors` (typed, secret-free) → `models` (incl. pinned `GITHUB_API_VERSION`) → `client` (read-only REST, manual redirect handling) → `snapshots` (pre-scan + containment + size limits) → `provider` (status translation, source-root scope, rename boundaries) → `service` (orchestration). No GitHub-specific impact engine exists. |
 
 ## Key design decisions (summary)
 
@@ -69,3 +70,26 @@ flowchart TD
 - **Swappable graph backend.** All graph access goes through `DependencyGraph`; replacing NetworkX later means changing one module.
 
 Full rationale: `docs/DESIGN_DECISIONS.md`. Phase working notes: `docs/archive/`.
+
+## Phase 3B adapter (unreleased, branch `phase3b-github-pr-analysis`)
+
+GitHub is a **change-source adapter**, not a new analysis layer:
+
+```
+GitHub PR metadata/files
+  → exact base/head SHA snapshots
+  → secure temporary extraction
+  → GitHubPullRequestProvider (a Phase 3A ChangeSetProvider)
+  → frozen ChangeSetAnalyzer
+  → embedded ChangeSetIntelligence (+ optional grounded explanation)
+```
+
+- **No GitHub-specific impact engine exists.** Phase 3A is reused verbatim;
+  the strongest invariant is release-blocking tested: a GitHub PR resolving
+  to the same change set as Phase 3A explicit input, with equivalent
+  snapshots, yields semantically identical `ChangeSetIntelligence`.
+- `backend/api/github.py` serves `POST /api/github/pull-request/analyze` and
+  `GET /api/github/status` (the latter exposes only `auth_configured`).
+- `github_pr.py` is the CLI; the seventh frontend view (**GitHub PR**) reuses
+  the shared `ChangeSetResults` component.
+- Full detail: `docs/GITHUB_PR_ANALYSIS.md`.

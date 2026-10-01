@@ -64,6 +64,48 @@ either pinned by a test, documented in code, or both.
 
 - **Vite/Cytoscape produces a non-blocking chunk-size warning** on build.
 
+## GitHub PR analysis (Phase 3B, unreleased)
+
+- **github.com only.** No GitHub Enterprise support yet.
+- **3000-file REST limit.** PRs changing more than 3000 files fail closed
+  (`incomplete_change_set`) — no impact is ever computed from a partial list.
+- **Synchronous analysis.** Each analysis downloads full base/head snapshots;
+  no persistent caching, no webhooks, no background monitoring.
+- **Read-only.** No PR comments, check runs, commit statuses, merge blocking,
+  bots, or writes of any kind. GitHub App / OAuth installation flows are not
+  implemented.
+- **Private repositories need the server-side `GITHUB_TOKEN`.**
+- **Archive resource limits** (100 MiB download / 256 MiB extracted /
+  50,000 files / 20 MiB per file): oversized snapshots are rejected
+  (`snapshot_too_large`), never silently truncated.
+- **Inherits Phase 1 parser coverage.** Snapshot content is parsed by the same
+  regex extractors, with the same dependency types and limitations.
+- **No ambient proxy support.** The client is built with `trust_env=False`
+  (deliberate: no environment proxy inheritance, no ambient proxy
+  credentials, no NETRC inheritance). Phase 3B currently does not support
+  environments where outbound GitHub access is possible only through an
+  OS/environment-configured HTTP proxy — such deployments fail closed with
+  `github_unavailable`. Explicit proxy configuration can be designed
+  separately in the future.
+- **`source_root` length bound.** Values longer than 1024 characters are
+  rejected (`invalid_source_root`); this is input hardening, not filesystem
+  security (traversal is rejected independently).
+- **Strict upstream metadata validation.** `base.sha`/`head.sha` must be
+  full 40-character hex commit SHAs; `base.repo.full_name`/
+  `head.repo.full_name` must be valid `owner/repository` names; malformed
+  values fail closed (`malformed_github_response`). No branch-name or
+  merge-SHA substitution is ever performed.
+- **Deleted-fork semantics.** `head.repo: null` is legitimate; the head
+  snapshot is then fetched from the base repository by exact head SHA,
+  else `head_snapshot_unavailable`.
+- **Fail-closed archive host policy.** Only the explicitly audited
+  archive destination `codeload.github.com` is accepted (trailing-dot
+  hosts rejected). GitHub documents no fixed redirect host; if delivery
+  hosts change, analysis fails closed until the new host is reviewed.
+- **Actual AI context.** The explainer receives only deterministic Phase 3A
+  change-set intelligence — never PR title, author, PR number, repository
+  metadata, raw patch text, archive URLs, the token, or snapshot contents.
+
 ## What is deliberately not built
 
 Automated release verdicts, failure-probability prediction, automated
